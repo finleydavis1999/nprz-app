@@ -1,18 +1,25 @@
-# Ignore everything by default
-*
+# Data and output files
+first_data/
+*.duckdb
+*.parquet
+*.gpkg
+*.zip
+*.geojson
 
-# Un-ignore only what we want tracked
-!.gitignore
-!README.md
+# R scratch and personal files
+R_scripts/scratch_script.R
+R_scripts/playbook_all_NPRZ.R
 
-# R scripts
-!R_scripts/playbook_ai_assisted_prepare_grid.R
-!R_scripts/playbook_prepare_grid.R
-
-# Always ignore these explicitly
+# Svelte and Node
+svelte-tutorials/
 node_modules/
+
+# R environment files
 .Rhistory
 .RData
 .Rproj.user/
+
+# System files
 .DS_Store
 Thumbs.db
+

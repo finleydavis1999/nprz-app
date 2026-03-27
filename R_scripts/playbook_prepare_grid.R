@@ -1,35 +1,15 @@
-install.packages("sf", type = "binary")
-library(sf)
+# =============================================================
+# playbook_prepare_grid.R
+# Purpose: Load CBS 100m grid, remove suppressed columns,
+#          export to DuckDB and GeoParquet
+# Data source: CBS Vierkantstatistieken 2024 (vk100)
+# CRS: EPSG:28992 (RD New)
+# Author: Finley Davis
+# Date: 26 March 2026
+# =============================================================
 
-basic_square_data <- st_read("C:\\Users\\finle\\Downloads\\cbs_vk100_2024_v1.gpkg")
-
-#translating a row
-library(deeplr)
-my_key <- "59f55501-d037-4a25-abd6-0ec2b2e5609a:fx"
-translated_names <- sapply(names(data), function(term) {
-  Sys.sleep(0.5)  # wait 0.5 seconds between each call
-  term_spaced <- gsub("_", " ", term)
-  res <- POST("https://api-free.deepl.com/v2/translate",
-              body = list(text = term, target_lang = "EN", source_lang = "NL", auth_key = my_key),
-              encode = "form")
-  content(res)$translations[[1]]$text
-})
-english_basic_square_data <- basic_square_data
-names(english_basic_square_data) <- translated_names
-
-#saving and reuploading key sets to then compare them
-
-st_write(english_basic_square_data, "C:/Users/finle/Downloads/cbs_vk100_2024_english.gpkg")
-onekm_square_data <- st_read("C:/Users/finle/Downloads/cbs_vk100_2024_english.gpkg")
-untranslated_onekm_square_data <- st_read("C:\\Users\\finle\\Downloads\\cbs_vk100_2024_v1.gpkg")
-fivekm_square_data <- st_read("C:\\Users\\finle\\Downloads\\cbs_vk500_2024_v1.gpkg")
-
-setdiff(names(untranslated_onekm_square_data), names(fivekm_square_data))
-setdiff(names(fivekm_square_data), names(untranslated_onekm_square_data))
-
-
-#loading, editing, and sending to VScode the first dataset
-install.packages(c("arrow", "dplyr"))  
+#paths and packages
+install.packages(c("sf", "dplyr"))  
 install.packages("duckdb", repos = "https://duckdb.r-universe.dev")
 install.packages("arrow", repos = "https://apache.r-universe.dev")
 
@@ -37,9 +17,8 @@ library(sf)
 library(duckdb)
 library(arrow)
 library(dplyr)
-library(arrow)
 
-zip_path    <- "C:/Users/finle/Downloads/2025-cbs_vk100_2024_v1 (2).zip"
+zip_path <- "C:/Users/finle/Downloads/2025-cbs_vk100_2024_v1.zip"
 output_dir  <- "C:/NPRZ_project/first_data"
 
 #creating folder to output to (first_data), unzipping file, importing & inspecting it
@@ -47,7 +26,8 @@ dir.create(output_dir, recursive = TRUE, showWarnings = FALSE) ##this actually d
 unzip(zip_path, exdir = file.path(output_dir, "cbs_raw"))
 
 
-grid <- st_read("C:\\Users\\finle\\Downloads\\cbs_vk100_2024_v1.gpkg") #need to make sure this can pull out of the zip file
+gpkg_path <- file.path(output_dir, "cbs_raw", "cbs_vk100_2024_v1.gpkg")
+grid <- st_read(gpkg_path)
 
 cat("\n--- Basic info ---\n")
 cat("Rows (grid squares):", nrow(grid), "\n")
@@ -82,7 +62,8 @@ plot(st_geometry(grid_filtered),
 duckdb_path <- file.path(output_dir, "basic_grid.duckdb") 
 
 con <- dbConnect(duckdb(), duckdb_path) #establishes duckDB connection to my duckDB database (duck files in my project folder)
-dbExecute(con, "INSTALL spatial; LOAD spatial;")
+dbExecute(con, "INSTALL spatial;")
+dbExecute(con, "LOAD spatial;")
 
 grid_for_db <- grid_filtered %>%
   dplyr::mutate(geom_wkt = st_as_text(geom)) %>%
@@ -96,7 +77,7 @@ cat("DuckDB saved to:", duckdb_path, "\n") #prints file destination, this is sti
 
 
 
-geoparquet_path <- file.path(output_dir, "basic_grid.parquet") ##this and below same as last, making a .parquet file path to save multiple tables potentially under this name, then mutating geomtery column to be understandble format for parquet file, then making sure its saved in right place
+geoparquet_path <- file.path(output_dir, "basic_grid.parquet") ##this and below same as last, except this parquet file path is just to one file it doesn't work like duckDB with its query-able database of multiple files, then mutating geomtery column to be understandble format for parquet file, then making sure its saved in right place
 
 grid_parquet <- grid_filtered %>%
   dplyr::mutate(geometry_wkt = st_as_text(geom)) %>%
@@ -114,5 +95,28 @@ cat("Variables dropped:", length(suppressed_cols), "(all -99995)\n")
 cat("DuckDB:           ", duckdb_path, "\n")
 cat("GeoParquet:       ", geoparquet_path, "\n")
 cat("CRS:               EPSG:28992 (RD New)\n")
+
+
+# --- 8. Export lightweight GeoJSON for Svelte testing -----------------------
+# Full grid is too large for browser rendering
+# Instead we export centroids (points) which are far lighter
+# and sufficient for initial map display and variable inspection
+
+# Compute centroid of each 100m square
+grid_centroids <- st_centroid(grid_filtered)
+
+# Export centroids as GeoJSON - reproject to WGS84 (EPSG:4326)
+# because web mapping libraries (MapLibre etc) expect standard lat/lon
+grid_centroids_wgs84 <- st_transform(grid_centroids, 4326)
+
+geojson_path <- file.path(output_dir, "cbs_centroids.geojson")
+
+st_write(grid_centroids_wgs84,
+         geojson_path,
+         driver = "GeoJSON",
+         delete_dsn = TRUE)
+
+cat("GeoJSON centroids saved to:", geojson_path, "\n")
+cat("Features:", nrow(grid_centroids_wgs84), "\n")
 
 
