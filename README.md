@@ -65,3 +65,13 @@ covering population, housing, energy, and proximity to amenities.
 - Spatial filter to study area (pending province boundary dataset)
 - Integration with Svelte app skeleton (pending colleague's repository setup)
 - Display variables on interactive map via DuckDB-WASM
+
+
+## getting data ready for map
+-you need to run 02_filter_south_holland.R to generate zh_grid.parquet and place it in cbs-map/static/ before running the app.
+
+CBS Map App (cbs-map/)
+A SvelteKit application that loads the CBS 100m grid data via DuckDB-WASM directly in the browser and displays it as an interactive choropleth map of Zuid-Holland.
+Setup: before running the app, generate the data file by running R_scripts/02_filter_south_holland.R in R, then copy the output zh_grid.parquet into cbs-map/static/.
+To run locally: navigate to cbs-map/, run npm install then npm run dev.
+What +page.svelte does: initialises DuckDB-WASM in the browser and registers the parquet file as a queryable data source. When a variable is selected from the dropdown, it runs a SQL query filtering out suppressed values (-99995, -9997) and any negatives, calculates 4 quantile class breaks from the valid distribution, assigns each grid square to a class, and passes the result as GeoJSON to MapLibre GL for rendering as a choropleth with a grey "no data" category for unknown values. The legend updates dynamically with each variable switch.
