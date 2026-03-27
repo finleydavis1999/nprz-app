@@ -1,0 +1,18 @@
+# Ignore everything by default
+*
+
+# Un-ignore only what we want tracked
+!.gitignore
+!README.md
+
+# R scripts
+!R_scripts/playbook_ai_assisted_prepare_grid.R
+!R_scripts/playbook_prepare_grid.R
+
+# Always ignore these explicitly
+node_modules/
+.Rhistory
+.RData
+.Rproj.user/
+.DS_Store
+Thumbs.db
