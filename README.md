@@ -61,10 +61,6 @@ To regenerate them, run the preparation script as described above.
 -99995, meaning too few inhabitants to report). 35 variables are retained 
 covering population, housing, energy, and proximity to amenities.
 
-## Next Steps
-- Spatial filter to study area (pending province boundary dataset)
-- Integration with Svelte app skeleton (pending colleague's repository setup)
-- Display variables on interactive map via DuckDB-WASM
 
 
 ## getting data ready for map
