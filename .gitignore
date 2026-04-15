@@ -1,20 +1,42 @@
-# Data and output files
-first_data/
+# Data and output files — ignore raw/processed, but commit export
+first_data/raw/
+first_data/processed/
+first_data/.gitignore
+first_data/.npmrc
+first_data/.prettierignore
+first_data/.prettierrc
+first_data/.vscode/
+first_data/README.md
+first_data/basic_grid.parquet
+first_data/eslint.config.js
+first_data/package-lock.json
+first_data/package.json
+first_data/src/
+first_data/static/
+first_data/svelte.config.js
+first_data/tsconfig.json
+first_data/vite.config.ts
+first_data/zh_grid.parquet
+first_data/.svelte-kit/
 *.duckdb
-*.parquet
 *.gpkg
 *.zip
 *.geojson
 
+# Allow export folder (contains committed parquet files)
+!first_data/export/
+!first_data/export/*.parquet
+
 # R scratch and personal files
-R_scripts/scratch_script.R
-R_scripts/playbook_all_NPRZ.R
+R_scripts/global/
+R_scripts/first\ play\ arounds/
 
 # Svelte and Node
 svelte-tutorials/
 node_modules/
 cbs-map/node_modules/
 cbs-map/.svelte-kit/
+cbs-map/static/zh_grid.parquet
 
 # R environment files
 .Rhistory
@@ -25,6 +47,10 @@ cbs-map/.svelte-kit/
 .DS_Store
 Thumbs.db
 
-#Json files from previous svelte project
+# JSON files at root
+package-lock.json
+package.json
+
+# JSON files  in cbs-map
 cbs-map/package-lock.json
 cbs-map/package.json
