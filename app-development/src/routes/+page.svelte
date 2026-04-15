@@ -1,266 +1,502 @@
 <script lang="ts">
-    import { MapLibre, GeoJSONSource, FillLayer, LineLayer } from 'svelte-maplibre-gl';
-    import 'maplibre-gl/dist/maplibre-gl.css';
-    import { browser } from '$app/environment';
-    import * as duckdb from '@duckdb/duckdb-wasm';
+  import { MapLibre, GeoJSONSource, FillLayer, LineLayer } from 'svelte-maplibre-gl';
+  import 'maplibre-gl/dist/maplibre-gl.css';
+  import { browser } from '$app/environment';
+  import * as duckdb from '@duckdb/duckdb-wasm';
 
-    const variables = [
-        { key: 'aantal_inwoners', label: 'Total population' },
-        { key: 'aantal_mannen', label: 'Men' },
-        { key: 'aantal_vrouwen', label: 'Women' },
-        { key: 'aantal_inwoners_0_tot_15_jaar', label: 'Age 0–15' },
-        { key: 'aantal_inwoners_15_tot_25_jaar', label: 'Age 15–25' },
-        { key: 'aantal_inwoners_25_tot_45_jaar', label: 'Age 25–45' },
-        { key: 'aantal_inwoners_45_tot_65_jaar', label: 'Age 45–65' },
-        { key: 'aantal_inwoners_65_jaar_en_ouder', label: 'Age 65+' },
-        { key: 'percentage_geb_nederland_herkomst_nederland', label: '% Dutch origin' },
-        { key: 'percentage_geb_nederland_herkomst_overig_europa', label: '% European origin (NL-born)' },
-        { key: 'percentage_geb_nederland_herkomst_buiten_europa', label: '% Non-European origin (NL-born)' },
-        { key: 'percentage_geb_buiten_nederland_herkomst_europa', label: '% European origin (foreign-born)' },
-        { key: 'percentage_geb_buiten_nederland_herkmst_buiten_europa', label: '% Non-European origin (foreign-born)' },
-        { key: 'aantal_part_huishoudens', label: 'Total households' },
-        { key: 'aantal_eenpersoonshuishoudens', label: 'Single-person households' },
-        { key: 'aantal_meerpersoonshuishoudens_zonder_kind', label: 'Multi-person households (no children)' },
-        { key: 'aantal_eenouderhuishoudens', label: 'Single-parent households' },
-        { key: 'aantal_tweeouderhuishoudens', label: 'Two-parent households' },
-        { key: 'gemiddelde_huishoudensgrootte', label: 'Average household size' },
-        { key: 'aantal_woningen', label: 'Total dwellings' },
-        { key: 'aantal_woningen_bouwjaar_voor_1945', label: 'Dwellings built before 1945' },
-        { key: 'aantal_woningen_bouwjaar_45_tot_65', label: 'Dwellings built 1945–65' },
-        { key: 'aantal_woningen_bouwjaar_65_tot_75', label: 'Dwellings built 1965–75' },
-        { key: 'aantal_woningen_bouwjaar_75_tot_85', label: 'Dwellings built 1975–85' },
-        { key: 'aantal_woningen_bouwjaar_85_tot_95', label: 'Dwellings built 1985–95' },
-        { key: 'aantal_woningen_bouwjaar_95_tot_05', label: 'Dwellings built 1995–05' },
-        { key: 'aantal_woningen_bouwjaar_05_tot_15', label: 'Dwellings built 2005–15' },
-        { key: 'aantal_woningen_bouwjaar_15_en_later', label: 'Dwellings built 2015+' },
-        { key: 'aantal_meergezins_woningen', label: 'Multi-family dwellings' },
-        { key: 'percentage_koopwoningen', label: '% Owner-occupied' },
-        { key: 'percentage_huurwoningen', label: '% Rental' },
-        { key: 'aantal_huurwoningen_in_bezit_woningcorporaties', label: 'Social housing units' },
-        { key: 'aantal_niet_bewoonde_woningen', label: 'Unoccupied dwellings' },
-        { key: 'aantal_personen_met_uitkering_onder_aowlft', label: 'Persons on benefits (under pension age)' },
-    ];
+  // ── Scale configuration ──────────────────────────────────
+  const INNER_SCALES = [
+    { key: '100m',  label: '100m grid',  file: 'grid_100m_rijnmond.parquet', idCol: 'crs28992res100m' },
+    { key: '500m',  label: '500m grid',  file: 'grid_500m_rijnmond.parquet', idCol: 'crs28992res100m' },
+    { key: 'buurt', label: 'Buurt',      file: 'buurt_2024.parquet',          idCol: 'buurtcode' },
+  ];
 
-    let selectedVar = $state(variables[0].key);
-    let geojson = $state<any>(null);
-    let loading = $state(true);
-    let error = $state<string | null>(null);
-    let conn = $state<any>(null);
-    let currentBreaks = $state<number[]>([]);
+  const OUTER_SCALES = [
+    { key: 'pc4',       label: 'PC4 postcode', file: 'pc4_zh_2024.parquet',   idCol: 'postcode' },
+    { key: 'wijk',      label: 'Wijk',         file: 'wijk_2024.parquet',      idCol: 'wijkcode' },
+    { key: 'gemeente',  label: 'Gemeente',     file: 'gemeente_2024.parquet',  idCol: 'gemeentecode' },
+  ];
 
-    function wktToGeometry(wkt: string) {
-        try {
-            const inner = wkt
-                .replace('MULTIPOLYGON (((', '')
-                .replace(')))', '')
-                .trim();
-            const coords = inner.split(', ').map((pair: string) => {
-                const [lng, lat] = pair.trim().split(' ').map(Number);
-                return [lng, lat];
-            });
-            return { type: 'Polygon', coordinates: [coords] };
-        } catch {
-            return null;
-        }
-    }
+  // ── Variables available at all scales ────────────────────
+  // Key must exist in 100m grid (most restrictive)
+  // Variables only in admin files will be added separately later
+  const VARIABLES = [
+    { key: 'aantal_inwoners',                              label: 'Total population',               canNormalise: false },
+    { key: 'aantal_mannen',                                label: 'Men',                            canNormalise: true  },
+    { key: 'aantal_vrouwen',                               label: 'Women',                          canNormalise: true  },
+    { key: 'aantal_inwoners_0_tot_15_jaar',                label: 'Age 0–15',                       canNormalise: true  },
+    { key: 'aantal_inwoners_15_tot_25_jaar',               label: 'Age 15–25',                      canNormalise: true  },
+    { key: 'aantal_inwoners_25_tot_45_jaar',               label: 'Age 25–45',                      canNormalise: true  },
+    { key: 'aantal_inwoners_45_tot_65_jaar',               label: 'Age 45–65',                      canNormalise: true  },
+    { key: 'aantal_inwoners_65_jaar_en_ouder',             label: 'Age 65+',                        canNormalise: true  },
+    { key: 'percentage_geb_nederland_herkomst_nederland',  label: '% Dutch origin',                 canNormalise: false },
+    { key: 'percentage_geb_nederland_herkomst_overig_europa', label: '% European origin (NL-born)', canNormalise: false },
+    { key: 'percentage_geb_nederland_herkomst_buiten_europa', label: '% Non-European (NL-born)',    canNormalise: false },
+    { key: 'percentage_geb_buiten_nederland_herkomst_europa', label: '% European (foreign-born)',   canNormalise: false },
+    { key: 'percentage_geb_buiten_nederland_herkmst_buiten_europa', label: '% Non-European (foreign-born)', canNormalise: false },
+    { key: 'aantal_part_huishoudens',                      label: 'Total households',               canNormalise: true  },
+    { key: 'aantal_eenpersoonshuishoudens',                label: 'Single-person households',       canNormalise: true  },
+    { key: 'gemiddelde_huishoudensgrootte',                label: 'Avg household size',             canNormalise: false },
+    { key: 'aantal_woningen',                              label: 'Total dwellings',                canNormalise: true  },
+    { key: 'percentage_koopwoningen',                      label: '% Owner-occupied',               canNormalise: false },
+    { key: 'percentage_huurwoningen',                      label: '% Rental',                       canNormalise: false },
+    { key: 'aantal_huurwoningen_in_bezit_woningcorporaties', label: 'Social housing units',         canNormalise: true  },
+    { key: 'aantal_niet_bewoonde_woningen',                label: 'Unoccupied dwellings',           canNormalise: true  },
+    { key: 'aantal_personen_met_uitkering_onder_aowlft',   label: 'Persons on benefits',            canNormalise: true  },
+  ];
 
-    function quantileBreaks(values: number[], n: number): number[] {
-        const sorted = [...values].sort((a, b) => a - b);
-        const breaks = [];
-        for (let i = 1; i < n; i++) {
-            const idx = Math.floor((i / n) * sorted.length);
-            breaks.push(sorted[idx]);
-        }
-        return breaks;
-    }
+  const NORMALISATIONS = [
+    { key: 'none',            label: 'Raw value' },
+    { key: 'per_km2',         label: 'Per km²' },
+    { key: 'per_1000',        label: 'Per 1,000 inhabitants' },
+  ];
 
-    async function loadVariable(connection: any, varName: string) {
-    loading = true;
+  // ── Colour scheme (4 quantile classes + no-data) ─────────
+  const COLOURS = ['#f1eef6', '#bdc9e1', '#74a9cf', '#045a8d'];
+  const NO_DATA_COLOUR = '#e0e0e0';
+
+  // ── App state ─────────────────────────────────────────────
+  let innerScale     = $state(INNER_SCALES[0].key);
+  let outerScale     = $state(OUTER_SCALES[2].key);  // gemeente default — widest view
+  let selectedVar    = $state(VARIABLES[0].key);
+  let normalisation  = $state('none');
+
+  let innerGeojson   = $state<any>(null);
+  let outerGeojson   = $state<any>(null);
+  let innerBreaks    = $state<number[]>([]);
+  let outerBreaks    = $state<number[]>([]);
+  let loading        = $state(false);
+  let error          = $state<string | null>(null);
+
+  let db: duckdb.AsyncDuckDB | null = null;
+  let conn: any = null;
+
+  // ── WKT parser — handles POLYGON and MULTIPOLYGON ────────
+  function parseWKT(wkt: string): any {
+    if (!wkt) return null;
     try {
-        const result = await connection.query(`
-            SELECT geometry_wkt, "${varName}" as value
-            FROM read_parquet('zh_grid.parquet')
-            WHERE "${varName}" != -99995
-        `);
-        const rows = result.toArray().map((row: any) => row.toJSON());
-        
-        // Separate valid values from suppressed/unknown
-        const validRows = rows.filter((r: any) => r.value !== -99997 && r.value !== null && isFinite(Number(r.value)));
-        const values = validRows.map((r: any) => Number(r.value));
-        const breaks = quantileBreaks(values, 4); // 4 breaks = 4 classes for valid data
+      if (wkt.startsWith('MULTIPOLYGON')) {
+        // Strip outer wrapper, split into polygons
+        const inner = wkt.replace(/^MULTIPOLYGON\s*\(\(\(/, '').replace(/\)\)\)$/, '');
+        const polygons = inner.split(')), ((').map(poly => {
+          const rings = poly.split('),(').map(ring =>
+            ring.replace(/^\(+/, '').replace(/\)+$/, '')
+                .split(',').map(pair => {
+                  const [x, y] = pair.trim().split(/\s+/).map(Number);
+                  return [x, y];
+                })
+          );
+          return rings;
+        });
+        return { type: 'MultiPolygon', coordinates: polygons };
+      } else if (wkt.startsWith('POLYGON')) {
+        const inner = wkt.replace(/^POLYGON\s*\(\(/, '').replace(/\)\)$/, '');
+        const rings = inner.split('),(').map(ring =>
+          ring.replace(/^\(+/, '').replace(/\)+$/, '')
+              .split(',').map(pair => {
+                const [x, y] = pair.trim().split(/\s+/).map(Number);
+                return [x, y];
+              })
+        );
+        return { type: 'Polygon', coordinates: rings };
+      }
+    } catch { return null; }
+    return null;
+  }
 
-        geojson = {
-            type: 'FeatureCollection',
-            features: rows.map((row: any) => ({
-                type: 'Feature',
-                geometry: wktToGeometry(row.geometry_wkt),
-                properties: {
-                    value: row.value,
-                    class: row.value === -99997 || row.value === null
-                        ? 'nodata'
-                        : String(breaks.findIndex((b) => row.value <= b) === -1 ? 3 : breaks.findIndex((b) => row.value <= b))
-                }
-            })).filter((f: any) => f.geometry !== null)
-        };
+  // ── Quantile breaks ───────────────────────────────────────
+  function quantileBreaks(values: number[], n: number): number[] {
+    const sorted = [...values].filter(v => isFinite(v)).sort((a, b) => a - b);
+    if (sorted.length === 0) return [];
+    return Array.from({ length: n - 1 }, (_, i) => {
+      const idx = Math.floor(((i + 1) / n) * sorted.length);
+      return sorted[Math.min(idx, sorted.length - 1)];
+    });
+  }
 
-        currentBreaks = breaks;
-    } catch(e) {
-        error = `Query error: ${e}`;
+  function classifyValue(value: number, breaks: number[]): string {
+    if (value === null || value === undefined || !isFinite(value) || 
+        value <= -99990) return 'nodata';
+    for (let i = 0; i < breaks.length; i++) {
+      if (value <= breaks[i]) return String(i);
+    }
+    return String(breaks.length);
+  }
+
+  // ── Build normalisation SQL expression ───────────────────
+  function normExpr(varKey: string, norm: string): string {
+    const v = `"${varKey}"`;
+    if (norm === 'per_km2') {
+      return `CASE WHEN "oppervlakte_land_in_ha" > 0 
+              THEN ${v} / ("oppervlakte_land_in_ha" / 100.0)
+              ELSE NULL END`;
+    }
+    if (norm === 'per_1000') {
+      return `CASE WHEN "aantal_inwoners" > 0 
+              THEN (${v}::DOUBLE / "aantal_inwoners") * 1000.0
+              ELSE NULL END`;
+    }
+    return v;  // none
+  }
+
+  // ── Register a parquet file with DuckDB ───────────────────
+  async function registerFile(filename: string) {
+    const url = new URL(`/data/${filename}`, window.location.origin).href;
+    await db!.registerFileURL(filename, url, duckdb.DuckDBDataProtocol.HTTP, false);
+  }
+
+  // ── Query one scale layer ─────────────────────────────────
+  async function queryLayer(
+    scaleKey: string,
+    scales: typeof INNER_SCALES | typeof OUTER_SCALES,
+    varKey: string,
+    norm: string
+  ): Promise<{ geojson: any; breaks: number[] }> {
+
+    const scale = scales.find(s => s.key === scaleKey)!;
+    await registerFile(scale.file);
+
+    // Check if variable exists in this file
+    const colsResult = await conn.query(
+      `DESCRIBE SELECT * FROM read_parquet('${scale.file}') LIMIT 0`
+    );
+    const cols = colsResult.toArray().map((r: any) => r.toJSON().column_name as string);
+
+    const varExists    = cols.includes(varKey);
+    const areaExists   = cols.includes('oppervlakte_land_in_ha');
+    const popExists    = cols.includes('aantal_inwoners');
+
+    // Fall back to raw if normalisation columns missing
+    const canNorm = (norm === 'per_km2' && areaExists) ||
+                    (norm === 'per_1000' && popExists) ||
+                    norm === 'none';
+    const effectiveNorm = canNorm ? norm : 'none';
+
+    if (!varExists) {
+      return { geojson: null, breaks: [] };
+    }
+
+    const expr = normExpr(varKey, effectiveNorm);
+
+    const result = await conn.query(`
+      SELECT geometry_wkt,
+             "${scale.idCol}" as id,
+             ${expr} as value
+      FROM   read_parquet('${scale.file}')
+      WHERE  "${varKey}" > -99990
+    `);
+
+    const rows = result.toArray().map((r: any) => r.toJSON());
+    const values = rows
+      .map((r: any) => Number(r.value))
+      .filter((v: number) => isFinite(v) && v !== null);
+
+    const breaks = quantileBreaks(values, 4);
+
+    const geojson = {
+      type: 'FeatureCollection',
+      features: rows
+        .map((row: any) => {
+          const geom = parseWKT(row.geometry_wkt);
+          if (!geom) return null;
+          return {
+            type: 'Feature',
+            geometry: geom,
+            properties: {
+              id:    row.id,
+              value: row.value,
+              class: classifyValue(Number(row.value), breaks),
+            },
+          };
+        })
+        .filter(Boolean),
+    };
+
+    return { geojson, breaks };
+  }
+
+  // ── Load both layers ──────────────────────────────────────
+  async function loadLayers() {
+    if (!conn) return;
+    loading = true;
+    error = null;
+    try {
+      const [inner, outer] = await Promise.all([
+        queryLayer(innerScale, INNER_SCALES, selectedVar, normalisation),
+        queryLayer(outerScale, OUTER_SCALES, selectedVar, normalisation),
+      ]);
+      innerGeojson = inner.geojson;
+      innerBreaks  = inner.breaks;
+      outerGeojson = outer.geojson;
+      outerBreaks  = outer.breaks;
+    } catch (e) {
+      error = `Query failed: ${e}`;
     }
     loading = false;
+  }
+
+  // ── DuckDB initialisation ─────────────────────────────────
+  $effect(() => {
+    if (!browser) return;
+    async function init() {
+      try {
+        const bundles = duckdb.getJsDelivrBundles();
+        const bundle  = await duckdb.selectBundle(bundles);
+        const workerUrl = URL.createObjectURL(
+          new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
+        );
+        const worker = new Worker(workerUrl);
+        db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), worker);
+        await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+        URL.revokeObjectURL(workerUrl);
+        conn = await db.connect();
+        await loadLayers();
+      } catch (e) {
+        error = `DuckDB init failed: ${e}`;
+        loading = false;
+      }
+    }
+    init();
+  });
+
+  // ── Reload when any control changes ──────────────────────
+  $effect(() => {
+    const _ = [innerScale, outerScale, selectedVar, normalisation];
+    if (conn) loadLayers();
+  });
+
+  // ── MapLibre fill-color expression from breaks ────────────
+  function colourExpression(breaks: number[]): any {
+  if (!breaks.length) return NO_DATA_COLOUR;
+  return [
+    'match', ['get', 'class'],
+    'nodata', NO_DATA_COLOUR,
+    '0', COLOURS[0],
+    '1', COLOURS[1],
+    '2', COLOURS[2],
+    '3', COLOURS[3],
+    COLOURS[0],
+  ] as any;
 }
 
-    $effect(() => {
-        if (!browser) return;
-        async function setup() {
-            try {
-                const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
-                const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
-                const worker_url = URL.createObjectURL(
-                    new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
-                );
-                const worker = new Worker(worker_url);
-                const logger = new duckdb.ConsoleLogger();
-                const db = new duckdb.AsyncDuckDB(logger, worker);
-                await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-                URL.revokeObjectURL(worker_url);
-                await db.registerFileURL(
-                    'zh_grid.parquet',
-                    new URL('/zh_grid.parquet', window.location.origin).href,
-                    duckdb.DuckDBDataProtocol.HTTP,
-                    false
-                );
-                const connection = await db.connect();
-                conn = connection;
-                await loadVariable(connection, selectedVar);
-            } catch(e) {
-                error = `DuckDB init error: ${e}`;
-                loading = false;
-            }
-        }
-        setup();
-    });
-
-    $effect(() => {
-        const v = selectedVar;
-        if (conn) loadVariable(conn, v);
-    });
-
-    const colours = ['#f1eef6', '#bdc9e1', '#74a9cf', '#045a8d'];
+  // ── Current variable meta ─────────────────────────────────
+  const currentVar = $derived(VARIABLES.find(v => v.key === selectedVar)!);
 </script>
 
-<!-- Controls -->
+<!-- ── Controls ───────────────────────────────────────────── -->
 <div class="controls">
-    <label for="varselect"><strong>Display variable:</strong></label>
-    <select id="varselect" bind:value={selectedVar}>
-        {#each variables as v}
-            <option value={v.key}>{v.label}</option>
-        {/each}
+  <div class="control-group">
+    <span class="group-label">Inner scale (Rotterdam area)</span>
+    <div class="button-row">
+      {#each INNER_SCALES as s}
+        <button
+          class:active={innerScale === s.key}
+          onclick={() => innerScale = s.key}
+        >{s.label}</button>
+      {/each}
+    </div>
+  </div>
+
+  <div class="control-group">
+    <span class="group-label">Outer scale (context)</span>
+    <div class="button-row">
+      {#each OUTER_SCALES as s}
+        <button
+          class:active={outerScale === s.key}
+          onclick={() => outerScale = s.key}
+        >{s.label}</button>
+      {/each}
+    </div>
+  </div>
+
+  <div class="control-group">
+    <label for="var-select" class="group-label">Variable</label>
+    <select id="var-select" bind:value={selectedVar}>
+      {#each VARIABLES as v}
+        <option value={v.key}>{v.label}</option>
+      {/each}
     </select>
-    {#if loading}<span class="status">Loading...</span>{/if}
-    {#if error}<span class="status error">{error}</span>{/if}
+  </div>
+
+  <div class="control-group">
+    <span class="group-label">Normalise</span>
+    <div class="button-row">
+      {#each NORMALISATIONS as n}
+        <button
+          class:active={normalisation === n.key}
+          class:disabled={n.key !== 'none' && !currentVar?.canNormalise}
+          onclick={() => { if (n.key === 'none' || currentVar?.canNormalise) normalisation = n.key; }}
+        >{n.label}</button>
+      {/each}
+    </div>
+  </div>
+
+  {#if loading}<div class="status">Loading…</div>{/if}
+  {#if error}<div class="status error">{error}</div>{/if}
 </div>
 
-<!-- Legend -->
-{#if currentBreaks.length === 3}
-    <div class="legend">
-        <div class="legend-title">{variables.find(v => v.key === selectedVar)?.label}</div>
-        <div class="legend-row">
-            <span class="swatch" style="background:#d3d3d3"></span>
-            No data / unknown
-        </div>
-        {#each colours as colour, i}
-            <div class="legend-row">
-                <span class="swatch" style="background:{colour}"></span>
-                {#if i === 0}
-                    ≤ {currentBreaks[0].toFixed(1)}
-                {:else if i === 3}
-                    > {currentBreaks[2].toFixed(1)}
-                {:else}
-                    ≤ {currentBreaks[i].toFixed(1)}
-                {/if}
-            </div>
-        {/each}
+<!-- ── Legend ─────────────────────────────────────────────── -->
+{#if innerBreaks.length}
+  <div class="legend">
+    <div class="legend-title">{currentVar?.label}</div>
+    <div class="legend-row">
+      <span class="swatch" style="background:{NO_DATA_COLOUR}"></span>
+      No data
     </div>
+    {#each COLOURS as colour, i}
+      <div class="legend-row">
+        <span class="swatch" style="background:{colour}"></span>
+        {#if i === 0}
+          ≤ {innerBreaks[0]?.toFixed(1)}
+        {:else if i === COLOURS.length - 1}
+          > {innerBreaks[innerBreaks.length - 1]?.toFixed(1)}
+        {:else}
+          ≤ {innerBreaks[i]?.toFixed(1)}
+        {/if}
+      </div>
+    {/each}
+  </div>
 {/if}
 
-<!-- Map -->
+<!-- ── Map ────────────────────────────────────────────────── -->
 <MapLibre
-    style="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
-    zoom={8}
-    center={{ lng: 4.5, lat: 52.0 }}
+  style="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
+  zoom={10}
+  center={{ lng: 4.48, lat: 51.92 }}
 >
-    {#if geojson}
-        <GeoJSONSource id="cbs-grid" data={geojson}>
-            <FillLayer
-    id="cbs-fill"
-    paint={{
-        'fill-color': [
-            'match', ['get', 'class'],
-            'nodata', '#d3d3d3',
-            '0', '#f1eef6',
-            '1', '#bdc9e1',
-            '2', '#74a9cf',
-            '3', '#045a8d',
-            '#f1eef6'
-        ],
-        'fill-opacity': 0.8
-    }}
-/>      
-            <LineLayer
-                id="cbs-outline"
-                paint={{ 'line-color': '#ffffff', 'line-width': 0.3 }}
-            />
-        </GeoJSONSource>
-    {/if}
+  {#if outerGeojson}
+    <GeoJSONSource id="outer-layer" data={outerGeojson}>
+      <FillLayer
+        id="outer-fill"
+        paint={{
+          'fill-color': colourExpression(outerBreaks),
+          'fill-opacity': 0.6,
+        }}
+      />
+      <LineLayer
+        id="outer-outline"
+        paint={{ 'line-color': '#ffffff', 'line-width': 0.5 }}
+      />
+    </GeoJSONSource>
+  {/if}
+
+  {#if innerGeojson}
+    <GeoJSONSource id="inner-layer" data={innerGeojson}>
+      <FillLayer
+        id="inner-fill"
+        paint={{
+          'fill-color': colourExpression(innerBreaks),
+          'fill-opacity': 0.85,
+        }}
+      />
+      <LineLayer
+        id="inner-outline"
+        paint={{ 'line-color': '#ffffff', 'line-width': 0.2 }}
+      />
+    </GeoJSONSource>
+  {/if}
 </MapLibre>
 
 <style>
-    :global(.maplibregl-map) {
-        height: 100vh;
-        width: 100vw;
-    }
-    .controls {
-        position: absolute;
-        top: 1rem;
-        left: 1rem;
-        z-index: 10;
-        background: white;
-        padding: 0.75rem 1rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        font-family: sans-serif;
-    }
-    .status { margin-left: 0.75rem; color: grey; }
-    .error { color: red; }
-    .legend {
-        position: absolute;
-        bottom: 2rem;
-        left: 1rem;
-        z-index: 10;
-        background: white;
-        padding: 0.75rem 1rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        font-family: sans-serif;
-        font-size: 0.85rem;
-        min-width: 160px;
-    }
-    .legend-title {
-        font-weight: bold;
-        margin-bottom: 0.5rem;
-    }
-    .legend-row {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin: 0.25rem 0;
-    }
-    .swatch {
-        width: 16px;
-        height: 16px;
-        border-radius: 3px;
-        display: inline-block;
-        border: 1px solid #ccc;
-    }
+  :global(.maplibregl-map) {
+    height: 100vh;
+    width: 100vw;
+  }
+
+  .controls {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    z-index: 10;
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    font-family: sans-serif;
+    font-size: 0.85rem;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .button-row {
+    display: flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+  }
+
+  button {
+    padding: 0.25rem 0.6rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    font-size: 0.82rem;
+    transition: all 0.15s;
+  }
+
+  button:hover { background: #f0f0f0; }
+  button.active { background: #045a8d; color: white; border-color: #045a8d; }
+  button.disabled { opacity: 0.4; cursor: not-allowed; }
+
+  select {
+    padding: 0.3rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    width: 100%;
+  }
+
+  .status { font-size: 0.8rem; color: #888; }
+  .error  { color: #c00; }
+
+  .legend {
+    position: absolute;
+    bottom: 2rem;
+    left: 1rem;
+    z-index: 10;
+    background: white;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    font-family: sans-serif;
+    font-size: 0.82rem;
+    min-width: 160px;
+  }
+
+  .legend-title {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.2rem 0;
+  }
+
+  .swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    border: 1px solid #ccc;
+    flex-shrink: 0;
+  }
+
+  .group-label {
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #555;
+}
 </style>
