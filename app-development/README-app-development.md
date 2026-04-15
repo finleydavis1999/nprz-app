@@ -18,7 +18,7 @@ A modern SvelteKit web application for exploring Dutch CBS (Statistics Netherlan
 
 2. **Copy data to static folder:**
    ```bash
-   cp ../first_data/export/*.parquet ./static/data/
+   cp ../data/export/*.parquet ./static/data/
    ```
 
 3. **Install dependencies:**

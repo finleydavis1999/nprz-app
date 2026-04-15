@@ -12,7 +12,7 @@
 # ============================================================
 
 # --- Root output directory ----------------------------------
-output_dir <- "C:/NPRZ_project/first_data"
+output_dir <- "C:/NPRZ_project/data"
 
 # --- Sub-directories ----------------------------------------
 raw_dir       <- file.path(output_dir, "raw")
@@ -520,7 +520,104 @@ message("Exported PC4: ", nrow(pc4_zh), " areas")
 message("Note: Attribution required — © CBS, © ESRI Nederland")
 
 # ============================================================
-# SECTION 10: FINAL SUMMARY
+# SECTION 10: GEOMETRY CLEANUP & SPATIAL FILTERING
+# Purpose: Fix duplicate columns, filter invalid rows,
+#          simplify gemeente/wijk geometry, apply spatial
+#          cutoffs per scale. Run after all exports complete.
+# ============================================================
+
+message("\n=== SECTION 10: Geometry cleanup & spatial filtering ===")
+
+sf_use_s2(FALSE)  # Use GEOS engine — tolerant of imperfect CBS geometries
+
+# --- Helper: clean one parquet file --------------------------
+clean_parquet <- function(filename, 
+                           filter_negative_inwoners = FALSE,
+                           zh_bbox_filter = FALSE,
+                           simplify_tolerance = NULL) {
+  
+  path <- file.path(export_dir, filename)
+  temp <- file.path(export_dir, paste0("TEMP_", filename))
+  
+  df <- arrow::read_parquet(path)
+  message("  ", filename, ": ", nrow(df), " rows | ", ncol(df), " cols | ",
+          round(file.size(path)/1024^2, 2), " MB")
+  
+  # Drop CamelCase_N duplicate columns from geometry+stats join
+  camel_cols <- names(df)[grepl("_\\d+$", names(df))]
+  if (length(camel_cols) > 0) {
+    df <- df[, !names(df) %in% camel_cols]
+    message("    Dropped ", length(camel_cols), " duplicate cols -> ", ncol(df), " remain")
+  }
+  
+  # Filter out CBS suppressed rows (-99997) using aantal_inwoners
+  if (filter_negative_inwoners && "aantal_inwoners" %in% names(df)) {
+    before <- nrow(df)
+    df <- df[!is.na(df$aantal_inwoners) & df$aantal_inwoners > 0, ]
+    message("    Removed ", before - nrow(df), " suppressed rows -> ", nrow(df), " remain")
+  }
+  
+  # Spatial filter to Zuid-Holland bbox (WGS84)
+  if (zh_bbox_filter) {
+    sf_obj <- st_as_sf(df, wkt = "geometry_wkt", crs = 4326)
+    sf_obj <- st_make_valid(sf_obj)
+    pts    <- st_point_on_surface(sf_obj)
+    coords <- st_coordinates(pts)
+    keep   <- coords[,"X"] >= 3.8 & coords[,"X"] <= 5.2 &
+              coords[,"Y"] >= 51.6 & coords[,"Y"] <= 52.4
+    df <- df[keep, ]
+    message("    After ZH filter: ", nrow(df), " rows")
+  }
+  
+  # Simplify geometry — reduces file size for coarser scales
+  if (!is.null(simplify_tolerance)) {
+    sf_obj     <- st_as_sf(df, wkt = "geometry_wkt", crs = 4326)
+    sf_obj     <- st_make_valid(sf_obj)
+    sf_simple  <- st_simplify(sf_obj, dTolerance = simplify_tolerance,
+                               preserveTopology = TRUE)
+    df <- cbind(
+      st_drop_geometry(sf_simple),
+      geometry_wkt = st_as_text(st_geometry(sf_simple))
+    ) |> as.data.frame()
+    message("    After simplify (", simplify_tolerance, "deg): ",
+            round(object.size(df$geometry_wkt)/1024^2, 2), " MB WKT")
+  }
+  
+  # Write to temp then rename (avoids Arrow file lock)
+  arrow::write_parquet(df, temp)
+  rm(df); gc()
+  file.rename(temp, path)
+  
+  message("    Final: ", nrow(arrow::read_parquet(path)), " rows | ",
+          round(file.size(path)/1024^2, 2), " MB")
+}
+
+# --- Buurt: dedup columns only (already Rijnmond-filtered) ---
+clean_parquet("buurt_2024.parquet",
+              filter_negative_inwoners = TRUE)
+
+# --- Wijk: dedup + ZH filter + simplify ----------------------
+clean_parquet("wijk_2024.parquet",
+              filter_negative_inwoners = TRUE,
+              zh_bbox_filter           = TRUE,
+              simplify_tolerance       = 0.001)
+
+# --- Gemeente: dedup + remove -99997 rows + simplify ---------
+clean_parquet("gemeente_2024.parquet",
+              filter_negative_inwoners = TRUE,
+              simplify_tolerance       = 0.002)
+
+# --- PC4: dedup + ZH filter ----------------------------------
+clean_parquet("pc4_zh_2024.parquet",
+              zh_bbox_filter = TRUE)
+
+# --- Grids: no cleanup needed --------------------------------
+message("  Grid files unchanged (no duplicates, already clipped)")
+
+message("\n=== Section 10 complete ===")
+
+# ============================================================
+# SECTION 11: FINAL SUMMARY
 # ============================================================
 
 message("\n========================================")
@@ -538,3 +635,22 @@ message("  gemeente_2024.parquet       — ", n_gemeente, " features")
 message("  pc4_zh_2024.parquet         — ", nrow(pc4_zh), " areas")
 message("\nNext step: copy export/ contents to cbs-map/static/data/")
 message("Then build the SvelteKit scale-switcher.")
+
+
+
+wijk <- arrow::read_parquet(file.path(export_dir, "wijk_2024.parquet"))
+cat("Wijk NAs in first numeric col:", 
+    sum(is.na(wijk[[names(wijk)[3]]]), na.rm = TRUE), "\n")
+cat("Wijk total rows:", nrow(wijk), "\n")
+cat("Wijk columns:", ncol(wijk), "\n")
+
+# Also print column names so we know what variables are available
+cat("Column names:\n")
+print(names(wijk))
+
+
+wijk <- arrow::read_parquet(file.path(export_dir, "wijk_2024.parquet"))
+cat("Wijk NAs in first numeric col:", 
+    sum(is.na(wijk[[names(wijk)[3]]]), na.rm = TRUE), "\n")
+cat("Wijk total rows:", nrow(wijk), "\n")
+cat("Wijk columns:", ncol(wijk), "\n")

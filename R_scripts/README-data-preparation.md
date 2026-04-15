@@ -19,7 +19,7 @@ install.packages(c("sf", "arrow", "dplyr", "stringr", "cbsodataR"))
 1. Open `app_core_setup/01_setup_and_process.R` in R or RStudio
 2. Run the entire script from top to bottom
 3. Monitor the console output for progress messages
-4. Outputs appear in `first_data/export/` when complete
+4. Outputs appear in `data/export/` when complete
 
 ### Runtime Expectations
 
@@ -35,7 +35,7 @@ install.packages(c("sf", "arrow", "dplyr", "stringr", "cbsodataR"))
 Defines study areas and output directories:
 - **Rijnmond:** 13 municipalities (Rotterdam, Schiedam, Vlaardingen, etc.)
 - **Zuid-Holland:** Province code PV28
-- **Output Dir:** `C:/NPRZ_project/first_data/`
+- **Output Dir:** `C:/NPRZ_project/data/`
 
 ### SECTION 2: LIBRARIES
 Loads required R packages: `sf`, `arrow`, `dplyr`, `cbsodataR`, `stringr`
@@ -48,7 +48,7 @@ Downloads raw data from CBS (only if not already cached):
 - **Kerncijfers (core statistics):** Via OData API
 - **Geometries:** Wijken/Buurten/Gemeenten
 
-**Cached in:** `first_data/raw/`
+**Cached in:** `data/raw/`
 
 ### SECTION 4: BUILD BOUNDARY & PROCESS GRIDS
 Creates a boundary polygon for the Rijnmond study area:
@@ -110,7 +110,7 @@ Reports all generated files and file sizes
 
 ## Output Files
 
-All files are saved to `first_data/export/` as **GeoParquet** format:
+All files are saved to `data/export/` as **GeoParquet** format:
 
 | File | Description | Geographic Scope | Rows |
 |------|-------------|------|------|
@@ -159,7 +159,7 @@ These are called by `01_setup_and_process.R` — normally you don't need to run 
 
 ### "object 'WijkenEnBuurten' not found"
 - **Cause:** Old kerncijfers RDS file with wrong dataset
-- **Fix:** Delete `first_data/raw/kerncijfers/kwb_2024_raw.rds` and re-run the script
+- **Fix:** Delete `data/raw/kerncijfers/kwb_2024_raw.rds` and re-run the script
 
 ### Script hangs for 5+ minutes during administrative scales
 - **Cause:** Geometry joins on large national datasets
@@ -167,14 +167,14 @@ These are called by `01_setup_and_process.R` — normally you don't need to run 
 - **Time estimate:** ~2–5 minutes for wijk/gemeente operations
 - **Tip:** Monitor console output; you should see "Geometry rows before/after filter" messages
 
-### Parquet files missing from `first_data/export/`
+### Parquet files missing from `data/export/`
 - **Check:** Did the script complete successfully? (look for "FULL PIPELINE COMPLETE" message)
-- **Check:** Do intermediate .rds files exist in `first_data/processed/`?
-- **Fix:** Delete entire `first_data/raw/` and `first_data/processed/` folders and re-run
+- **Check:** Do intermediate .rds files exist in `data/processed/`?
+- **Fix:** Delete entire `data/raw/` and `data/processed/` folders and re-run
 
 ### ZIP extraction fails
 - **Cause:** Download corrupted or incomplete
-- **Fix:** Delete the `.zip` file in `first_data/raw/` and re-run (will re-download)
+- **Fix:** Delete the `.zip` file in `data/raw/` and re-run (will re-download)
 
 ### DuckDB/Arrow/SF installation fails
 - **Fix:** Ensure you have R ≥ 4.0 and a C++ compiler
