@@ -252,7 +252,7 @@ process_grid <- function(zip_path, resolution_label, boundary_polygon, id_col) {
   list(res = resolution_label, rows = nrow(grid_rijnmond),
        cols_kept    = ncol(grid_clean) - 1,
        cols_dropped = length(suppressed_cols))
-
+}
 
 # ============================================================
 # SECTION 6: PROCESS BOTH RESOLUTIONS
@@ -397,6 +397,7 @@ export_admin_scale <- function(stats_df,
   message("  Exported stats parquet: ", stats_path)
 
   nrow(joined)
+}
 
 # --- Buurt: filter to Rijnmond municipalities ---------------
 # Buurt code: BU + 4-digit GM number + digits
