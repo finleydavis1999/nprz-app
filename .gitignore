@@ -11,6 +11,8 @@ data/export/
 *.gpkg
 *.zip
 *.geojson
+# Exception: GeoJSON files the app needs must be committed
+!app-development/static/data/*.geojson
 
 # But DO commit parquet files in static/data (new data location)
 !app-development/static/data/
