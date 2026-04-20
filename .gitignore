@@ -1,17 +1,20 @@
 # Ignore old first_data folder entirely (moved to data/)
 first_data/
 
-# Data outputs — ignore raw/processed, but commit export
+# Data folders — ignore raw/processed and old export data
 data/raw/
 data/processed/
+data/export/
+
+# Ignore large geo files in data folder (using static/data instead)
 *.duckdb
 *.gpkg
 *.zip
 *.geojson
 
-# Allow export folder (contains committed parquet files)
-!data/export/
-!data/export/*.parquet
+# But DO commit parquet files in static/data (new data location)
+!app-development/static/data/
+!app-development/static/data/*.parquet
 
 # R scratch and personal files
 R_scripts/global/
@@ -23,6 +26,7 @@ node_modules/
 app-development/node_modules/
 app-development/.svelte-kit/
 app-development/static/zh_grid.parquet
+oldpage.svelte
 
 # R environment files
 .Rhistory
