@@ -169,7 +169,7 @@ async function applyLayer(
   return breaks;
 }
 
-  // ── Load both active layers ───────────────────────────────
+ // ── Load both active layers ───────────────────────────────
   async function loadLayers() {
     if (!mapReady || !dbReady) return;
     loading   = true;
@@ -179,16 +179,15 @@ async function applyLayer(
     try {
       const tasks: Promise<number[]>[] = [];
 
-      if (displayMode === 'outer' || displayMode === 'both') {
-  const effectiveOuterVar = (displayMode === 'both' && sharedVar) ? innerVarKey : outerVarKey;
-  tasks.push(
-    applyLayer(outerScaleKey, effectiveOuterVar, normalisation, `${outerScaleKey}-source`)
-      .then(b => { outerBreaks = b; return b; })
-  );
-}
+      if (displayMode === 'inner' || displayMode === 'both') {
+        tasks.push(
+          applyLayer(innerScaleKey, innerVarKey, normalisation, `${innerScaleKey}-source`)
+            .then(b => { innerBreaks = b; return b; })
+        );
+      }
 
       if (displayMode === 'outer' || displayMode === 'both') {
-        const effectiveOuterVar = sharedVar ? innerVarKey : outerVarKey;
+        const effectiveOuterVar = (displayMode === 'both' && sharedVar) ? innerVarKey : outerVarKey;
         tasks.push(
           applyLayer(outerScaleKey, effectiveOuterVar, normalisation, `${outerScaleKey}-source`)
             .then(b => { outerBreaks = b; return b; })
@@ -204,98 +203,124 @@ async function applyLayer(
     loading = false;
   }
 
+  // ── Flow period state ─────────────────────────────────────
+  let flowPeriod = $state<'20072012' | '20122017'>('20122017');
+
+  // ── Load flow lines ───────────────────────────────────────
   async function loadFlows() {
-  if (!map || !mapReady || !dbReady) return;
-  if (flowsLoading) return;
-  flowsLoading = true;
- 
-  try {
-    // Load gemeente centroids (pre-computed in R, tiny file)
-    const centroidsUrl = new URL('/data/gemeente_centroids.json', window.location.origin).href;
-    const centroidsRaw = await fetch(centroidsUrl).then(r => r.json());
-    const centroids = new Map<string, [number, number]>(
-      centroidsRaw.map((c: any) => [c.id, [c.lng, c.lat]])
-    );
- 
-    // Query top 500 flows from DuckDB (prevents rendering thousands of lines)
-    const flowUrl = new URL('/data/flows.parquet', window.location.origin).href;
-    const result  = await conn.query(`
-      SELECT origin_id, destination_id, flow_value
-      FROM read_parquet('${flowUrl}')
-      ORDER BY flow_value DESC
-      LIMIT 500
-    `);
-    const flows = result.toArray().map((r: any) => r.toJSON());
- 
-    // Build GeoJSON LineString features
-    const features: GeoJSON.Feature[] = [];
-    for (const flow of flows) {
-      const origin = centroids.get(flow.origin_id);
-      const dest   = centroids.get(flow.destination_id);
-      if (!origin || !dest) continue;   // skip if centroid not found
- 
-      features.push({
-        type: 'Feature',
-        properties: {
-          origin_id:      flow.origin_id,
-          destination_id: flow.destination_id,
-          flow_value:     flow.flow_value,
-        },
-        geometry: {
-          type:        'LineString',
-          coordinates: [origin, dest],
-        },
-      });
+    if (!map || !mapReady || !dbReady) return;
+    if (flowsLoading) return;
+    flowsLoading = true;
+
+    try {
+      const centroidsUrl = new URL('/data/gemeente_centroids.json', window.location.origin).href;
+      const centroidsRaw = await fetch(centroidsUrl).then(r => r.json());
+      const centroids = new Map<string, [number, number]>(
+        centroidsRaw.map((c: any) => [c.id, [c.lng, c.lat]])
+      );
+
+      const flowUrl = new URL('/data/edges_woonwerk_gem.parquet', window.location.origin).href;
+      const result  = await conn.query(`
+        SELECT origin_id, destination_id, flow_value
+        FROM read_parquet('${flowUrl}')
+        WHERE periode = '${flowPeriod}'
+        ORDER BY flow_value DESC
+        LIMIT 500
+      `);
+      const flows = result.toArray().map((r: any) => r.toJSON());
+
+      const features: Feature[] = [];
+      for (const flow of flows) {
+        const origin = centroids.get(flow.origin_id);
+        const dest   = centroids.get(flow.destination_id);
+        if (!origin || !dest) continue;
+        features.push({
+          type: 'Feature',
+          properties: {
+            origin_id:      flow.origin_id,
+            destination_id: flow.destination_id,
+            flow_value:     flow.flow_value,
+          },
+          geometry: {
+            type:        'LineString',
+            coordinates: [origin, dest],
+          },
+        });
+      }
+
+      const geojson: FeatureCollection = { type: 'FeatureCollection', features };
+
+      if (map.getSource('flows-source')) {
+        (map.getSource('flows-source') as maplibregl.GeoJSONSource).setData(geojson);
+      } else {
+        map.addSource('flows-source', { type: 'geojson', data: geojson });
+        map.addLayer({
+          id:     'flows-layer',
+          type:   'line',
+          source: 'flows-source',
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: {
+            'line-color':   '#e63946',
+            'line-opacity': 0.5,
+            'line-width': [
+              'interpolate', ['linear'], ['get', 'flow_value'],
+              500,   0.5,
+              5000,  2,
+              20000, 5,
+            ],
+          },
+        });
+      }
+
+      flowsLoaded  = true;
+      flowsLoading = false;
+
+    } catch (e) {
+      error        = `Flows error: ${e}`;
+      flowsLoading = false;
     }
- 
-    const geojson: GeoJSON.FeatureCollection = {
-      type:     'FeatureCollection',
-      features,
+  }
+
+  // ── Toggle flows visibility ───────────────────────────────
+  function toggleFlows() {
+    showFlows = !showFlows;
+    if (showFlows) {
+      loadFlows();
+    } else if (map && map.getLayer('flows-layer')) {
+      map.setLayoutProperty('flows-layer', 'visibility', 'none');
+    }
+  }
+
+  // ── Switch flow period ────────────────────────────────────
+  function switchPeriod(period: '20072012' | '20122017') {
+    flowPeriod  = period;
+    flowsLoaded = false;
+    if (showFlows) loadFlows();
+  }
+
+  // ── Zoom map to fit the active scale boundary ─────────────
+  function zoomToScale() {
+    if (!map || !mapReady) return;
+    // Bounds per scale key — defined from known extents
+    const bounds: Record<string, maplibregl.LngLatBoundsLike> = {
+      '100m':     [[4.35, 51.84], [4.62, 52.01]],  // Rotterdam core
+      '500m':     [[4.35, 51.84], [4.62, 52.01]],  // Rotterdam core
+      'buurt':    [[4.35, 51.84], [4.62, 52.01]],  // Rotterdam core
+      'pc4':      [[3.80, 51.50], [5.40, 52.60]],  // Greater metro
+      'wijk':     [[3.80, 51.50], [5.40, 52.60]],  // Greater metro
+      'gemeente': [[3.30, 50.75], [7.23, 53.58]],  // Full NL
     };
-     // Add or update the flows source
-    if (map.getSource('flows-source')) {
-      (map.getSource('flows-source') as maplibregl.GeoJSONSource).setData(geojson);
-    } else {
-      map.addSource('flows-source', { type: 'geojson', data: geojson });
-      map.addLayer({
-        id:     'flows-layer',
-        type:   'line',
-        source: 'flows-source',
-        layout: {
-          'line-join': 'round',
-          'line-cap':  'round',
-        },
-        paint: {
-          'line-color':   '#e63946',
-          'line-opacity': 0.5,
-          // Width scales with flow value: thin for small flows, thick for large
-          'line-width': [
-            'interpolate', ['linear'],
-            ['get', 'flow_value'],
-            1000,  0.5,
-            50000, 2,
-            200000, 5,
-          ],
-        },
-      });
+
+    const activeKey = displayMode === 'inner' ? innerScaleKey
+                    : displayMode === 'outer' ? outerScaleKey
+                    : outerScaleKey; // 'both' — zoom to outer extent
+
+    const bound = bounds[activeKey];
+    if (bound) {
+      map.fitBounds(bound, { padding: 40, duration: 800 });
     }
- 
-    flowsLoaded  = true;
-    flowsLoading = false;
- 
-  } catch (e) {
-    error        = `Flows error: ${e}`;
-    flowsLoading = false;
   }
-}
-function toggleFlows() {
-  showFlows = !showFlows;
-  if (showFlows && !flowsLoaded) {
-    loadFlows();
-  } else if (map && map.getLayer('flows-layer')) {
-    map.setLayoutProperty('flows-layer', 'visibility', showFlows ? 'visible' : 'none');
-  }
-}
+
 
   // ── Initialise MapLibre ───────────────────────────────────
   function initMap(container: HTMLDivElement) {
@@ -304,7 +329,18 @@ function toggleFlows() {
       style:  'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
       center: [4.48, 51.92],
       zoom:   10,
+      // Ensure map controls work — do not interfere with page scroll
+      scrollZoom:    true,
+      dragPan:       true,
+      dragRotate:    false,
+      touchZoomRotate: true,
     });
+
+    // Scale bar bottom-right
+    map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+
+    // Navigation control (zoom buttons)
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
 
     map.on('load', async () => {
       // Add all GeoJSON sources upfront
@@ -322,7 +358,7 @@ function toggleFlows() {
         type: 'geojson',
         data: new URL('/data/rotterdam_boundary.geojson', window.location.origin).href,
       });
-
+      
       // ── Inner layers ──────────────────────────────────────
       for (const scale of INNER_SCALES) {
         if (scale.type === 'point') {
@@ -472,6 +508,11 @@ function toggleFlows() {
     updateVisibleLayers();
     loadLayers();
   });
+    // Only zoom when switching to single-layer modes, not when selecting both
+$effect(() => {
+  const _ = displayMode;
+  if (displayMode !== 'both') zoomToScale();
+});
 
   // ── Legend helper ─────────────────────────────────────────
   function formatBreak(v: number): string {
@@ -604,21 +645,33 @@ function toggleFlows() {
     </div>
   </div>
 
-  <!-- Flows toggle -->
-     {#if outerScaleKey === 'gemeente' && (displayMode === 'outer' || displayMode === 'both')}
-    <div class="control-group">
-      <span class="group-label">Commuting flows</span>
+ <!-- Commuting flows (only for gemeente outer layer) -->
+{#if outerScaleKey === 'gemeente' && (displayMode === 'outer' || displayMode === 'both')}
+  <div class="control-group">
+    <span class="group-label">Commuting flows</span>
+    <div class="btn-row">
+      <button
+        class:active={showFlows}
+        onclick={toggleFlows}
+        disabled={flowsLoading}
+      >
+        {flowsLoading ? 'Loading...' : showFlows ? 'Hide flows' : 'Show flows'}
+      </button>
+    </div>
+    {#if showFlows}
       <div class="btn-row">
         <button
-          class:active={showFlows}
-          onclick={toggleFlows}
-          disabled={flowsLoading}
-        >
-          {flowsLoading ? 'Loading…' : showFlows ? 'Hide flows' : 'Show flows'}
-        </button>
+          class:active={flowPeriod === '20072012'}
+          onclick={() => switchPeriod('20072012')}
+        >2007-2012</button>
+        <button
+          class:active={flowPeriod === '20122017'}
+          onclick={() => switchPeriod('20122017')}
+        >2012-2017</button>
       </div>
-    </div>
-  {/if}
+    {/if}
+  </div>
+{/if}
 
   <!-- Status -->
   {#if loading}
@@ -660,16 +713,12 @@ function toggleFlows() {
 
 <style>
   .map-container {
-    position: fixed;
-    inset: 0;
-    width: 100vw;
-    height: 100vh;
-    pointer-events: none;
-  }
-
-  :global(.maplibregl-map) {
-    pointer-events: all;
-  }
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: all;  /* ← THIS is blocking drag */
+}
 
   .panel {
     position: fixed;
@@ -726,6 +775,8 @@ function toggleFlows() {
     font-size: 0.8rem;
     transition: background 0.12s, border-color 0.12s;
   }
+
+  
 
   button:hover:not(.disabled) { background: #f0f4f8; }
   button.active   { background: #045a8d; color: white; border-color: #045a8d; }

@@ -33,6 +33,8 @@ library(tidyr)
 NODES_DB   <- "D:/data-finley/data-finley/nodes-2018.sqlite"
 EDGES_DB   <- "D:/data-finley/data-finley/edges-woonwerk-2018.sqlite"
 EXPORT_DIR <- "C:/NPRZ_project/app-development/static/data"
+WERKWERK_DB  <- "D:/data-finley/data-finley/edges-werkwerk-2018.sqlite"
+MIGRATION_DB <- "D:/data-finley/data-finley/edges-migration-2018.sqlite"
 
 TARGET_YEARS_NODES <- c(2007L, 2012L, 2015L, 2017L)
 TARGET_YEARS_EDGES <- c("20072012", "20122017")
@@ -304,37 +306,43 @@ message("  Columns: ", paste(names(nodes_summary), collapse = ", "))
 # ── SECTION 5: Woonwerk edges ─────────────────────────────────────────────────
 message("\n=== Section 5: Woonwerk edges (home-work flows) ===")
 
-# The marginal total: age IS NOT NULL, all others NULL
-# This gives total commuters between each OD pair per period
-edges_raw <- dbGetQuery(con_edges, sprintf("
+con_edges <- dbConnect(SQLite(), EDGES_DB)
+
+edges_raw <- dbGetQuery(con_edges, "
   SELECT woongem, werkgem, year, SUM(value) AS flow_value
   FROM woonwerk_19992018_gem
-  WHERE year IN (%s)
+  WHERE year IN ('20072012', '20122017')
   AND age IS NOT NULL
   AND opl IS NULL AND inks IS NULL
   AND sectorcat IS NULL AND soortbaan IS NULL
   GROUP BY woongem, werkgem, year
   ORDER BY year, flow_value DESC
-", paste(sprintf("'%s'", TARGET_YEARS_EDGES), collapse = ",")))
+")
 
+dbDisconnect(con_edges)
+
+message("  Raw OD pairs: ", nrow(edges_raw))
+
+# Divide by 6 (both periods are 6 collection years: 2007-2012 and 2012-2017)
+# Source: JS metadata rowSumCalculation: range[1] - range[0] + 1
 edges_out <- edges_raw |>
   mutate(
     origin_id      = format_gm(woongem),
     destination_id = format_gm(werkgem),
+    flow_value     = round(flow_value / 6),
     variable_name  = "woonwerk",
-    .keep = "unused"
+    periode        = year
   ) |>
-  rename(periode = year) |>
+  filter(flow_value > 0) |>
   select(origin_id, destination_id, periode, flow_value, variable_name)
 
-message("  Total OD pairs: ", nrow(edges_out))
+message("  After averaging and filtering zeros: ", nrow(edges_out))
 message("  By period:")
 print(edges_out |> count(periode))
+message("  Top 5 flows (20122017):")
+print(edges_out |> filter(periode == "20122017") |> head(5))
 
-write_parquet(edges_out, file.path(EXPORT_DIR, "edges_woonwerk_gem.parquet"))
-message("  Exported edges_woonwerk_gem.parquet")
-
-# Per-origin summary for nodal display
+# Per-origin summary
 edges_summary <- edges_out |>
   group_by(origin_id, periode) |>
   summarise(
@@ -343,10 +351,108 @@ edges_summary <- edges_out |>
     .groups = "drop"
   )
 
+write_parquet(edges_out,     file.path(EXPORT_DIR, "edges_woonwerk_gem.parquet"))
 write_parquet(edges_summary, file.path(EXPORT_DIR, "edges_woonwerk_summary_gem.parquet"))
+
+message("  Exported edges_woonwerk_gem.parquet")
 message("  Exported edges_woonwerk_summary_gem.parquet")
 
-# ── SECTION 6: Disconnect & summary ──────────────────────────────────────────
+# ── SECTION 6: Werkwerk edges (job-to-job moves) ─────────────────────────────
+message("\n=== Section 6: Werkwerk edges (job moves) ===")
+
+con_ww <- dbConnect(SQLite(), WERKWERK_DB)
+
+werkwerk_raw <- dbGetQuery(con_ww, "
+  SELECT GEMy1, GEMy2, year, SUM(value) AS flow_value
+  FROM werkwerk_19992018_gem
+  WHERE year IN ('07-12', '12-17')
+  AND age IS NOT NULL
+  AND opl IS NULL AND inks IS NULL
+  AND sectorcat2 IS NULL AND sectorsector IS NULL AND soortbaan IS NULL
+  GROUP BY GEMy1, GEMy2, year
+  ORDER BY year, flow_value DESC
+")
+
+dbDisconnect(con_ww)
+
+message("  Raw OD pairs: ", nrow(werkwerk_raw))
+
+# Both periods are 6 years (2007-2012, 2012-2017)
+werkwerk_out <- werkwerk_raw |>
+  mutate(
+    origin_id      = format_gm(GEMy1),
+    destination_id = format_gm(GEMy2),
+    flow_value     = flow_value,
+    variable_name  = "werkwerk",
+    periode        = year
+  ) |>
+  filter(flow_value > 0) |>
+  select(origin_id, destination_id, periode, flow_value, variable_name)
+
+message("  After averaging: ", nrow(werkwerk_out))
+print(werkwerk_out |> count(periode))
+
+werkwerk_summary <- werkwerk_out |>
+  group_by(origin_id, periode) |>
+  summarise(
+    total_outflow  = sum(flow_value, na.rm = TRUE),
+    n_destinations = n_distinct(destination_id),
+    .groups = "drop"
+  )
+
+write_parquet(werkwerk_out,     file.path(EXPORT_DIR, "edges_werkwerk_gem.parquet"))
+write_parquet(werkwerk_summary, file.path(EXPORT_DIR, "edges_werkwerk_summary_gem.parquet"))
+message("  Exported edges_werkwerk_gem.parquet")
+
+# ── SECTION 7: Migration edges (residential moves) ───────────────────────────
+message("\n=== Section 7: Migration edges (residential moves) ===")
+
+
+
+con_mig <- dbConnect(SQLite(), MIGRATION_DB)
+
+migration_raw <- dbGetQuery(con_mig, "
+  SELECT gemPre, gemPost, year, SUM(value) AS flow_value
+  FROM verhuizingen_19992018_gem
+  WHERE year IN ('p07-10', 'p11-14', 'p15-18')
+  AND age IS NOT NULL
+  AND opl IS NULL AND inks IS NULL
+  AND sec IS NULL AND hh IS NULL AND inkchanges IS NULL
+  GROUP BY gemPre, gemPost, year
+  ORDER BY year, flow_value DESC
+")
+
+dbDisconnect(con_mig)
+
+message("  Raw OD pairs: ", nrow(migration_raw))
+
+migration_out <- migration_raw |>
+  mutate(
+    origin_id      = format_gm(gemPre),
+    destination_id = format_gm(gemPost),
+    flow_value     = flow_value,
+    variable_name  = "migration",
+    periode        = year
+  ) |>
+  filter(flow_value > 0) |>
+  select(origin_id, destination_id, periode, flow_value, variable_name)
+
+message("  After averaging: ", nrow(migration_out))
+print(migration_out |> count(periode))
+
+migration_summary <- migration_out |>
+  group_by(origin_id, periode) |>
+  summarise(
+    total_outflow  = sum(flow_value, na.rm = TRUE),
+    n_destinations = n_distinct(destination_id),
+    .groups = "drop"
+  )
+
+write_parquet(migration_out,     file.path(EXPORT_DIR, "edges_migration_gem.parquet"))
+write_parquet(migration_summary, file.path(EXPORT_DIR, "edges_migration_summary_gem.parquet"))
+message("  Exported edges_migration_gem.parquet")
+
+# ── SECTION 8: Disconnect & summary ──────────────────────────────────────────
 dbDisconnect(con_nodes)
 dbDisconnect(con_edges)
 
