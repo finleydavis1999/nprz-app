@@ -12,7 +12,6 @@
 	const activeVarId = $derived(
 		state.filters?.variable?.[0] ?? variableField?.default ?? options[0]?.id
 	);
-	
 
 	// When switching to a dataset that has a variable field, set the default
 	// immediately. Use $effect on the dataset key so it fires on dataset change.
