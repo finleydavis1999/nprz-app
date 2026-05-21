@@ -200,6 +200,18 @@
 		if (!text) return;
 		document.execCommand('insertText', false, text);
 	}
+	let calcMode = $state('display');
+
+	function onDisplayCalc() {
+		calcError = null;
+		try {
+			layers.previewCalc(calcExpr, calcDomain);
+			calcExpr = '';
+			if (exprEditor) exprEditor.replaceChildren();
+		} catch (err) {
+			calcError = err?.message ?? String(err);
+		}
+	}
 </script>
 
 <div class="stack">
@@ -314,30 +326,40 @@
 	{/if}
 
 	<form class="calc" onsubmit={onSaveCalc}>
-		<div class="calc-head">Add calculation</div>
+		<div class="calc-head">
+			<span>Calculation</span>
+			<div class="mode-seg" role="radiogroup">
+				<button
+					type="button"
+					class:active={calcMode === 'display'}
+					onclick={() => (calcMode = 'display')}>Display</button
+				>
+				<button type="button" class:active={calcMode === 'save'} onclick={() => (calcMode = 'save')}
+					>Save</button
+				>
+			</div>
+		</div>
 		<Field label="Output">
 			<div class="seg" role="radiogroup" aria-label="Calc output domain">
 				<button
 					type="button"
 					class:active={calcDomain === 'node'}
 					aria-pressed={calcDomain === 'node'}
-					onclick={() => (calcDomain = 'node')}
+					onclick={() => (calcDomain = 'node')}>Node layer</button
 				>
-					Node layer
-				</button>
 				<button
 					type="button"
 					class:active={calcDomain === 'flow'}
 					aria-pressed={calcDomain === 'flow'}
-					onclick={() => (calcDomain = 'flow')}
+					onclick={() => (calcDomain = 'flow')}>Flow layer</button
 				>
-					Flow layer
-				</button>
 			</div>
 		</Field>
-		<Field label="Name">
-			<input type="text" placeholder="e.g. youthShare" bind:value={calcName} autocomplete="off" />
-		</Field>
+		{#if calcMode === 'save'}
+			<Field label="Name">
+				<input type="text" placeholder="e.g. youthShare" bind:value={calcName} autocomplete="off" />
+			</Field>
+		{/if}
 		<Field label="Expression">
 			<div
 				class="expr-editor"
@@ -397,8 +419,9 @@
 			{#if flowLayers.length > 0}
 				<div class="palette-group">
 					<div class="palette-head">
-						Flow layers{#if calcDomain === 'node'}
-							<span class="muted">— wrapped with {flowAgg}( )</span>{/if}
+						Flow layers{#if calcDomain === 'node'}<span class="muted"
+								>— wrapped with {flowAgg}( )</span
+							>{/if}
 					</div>
 					<div class="palette" aria-label="Available flow layers — click to insert">
 						{#each flowLayers as l (l.id)}
@@ -425,7 +448,13 @@
 		{#if calcError}
 			<p class="err-msg">{calcError}</p>
 		{/if}
-		<button type="submit" class="primary" disabled={!calcName || !calcExpr}>Add layer</button>
+		{#if calcMode === 'display'}
+			<button type="button" class="primary" disabled={!calcExpr} onclick={onDisplayCalc}
+				>Display layer</button
+			>
+		{:else}
+			<button type="submit" class="primary" disabled={!calcName || !calcExpr}>Save layer</button>
+		{/if}
 	</form>
 </div>
 
@@ -716,5 +745,34 @@
 		font-family: ui-monospace, monospace;
 		font-size: var(--text-xs);
 		color: var(--color-text);
+	}
+	.mode-seg {
+		display: inline-flex;
+		border: 1px solid var(--color-line);
+		border-radius: var(--radius);
+		overflow: hidden;
+	}
+	.mode-seg button {
+		background: transparent;
+		border: none;
+		padding: 2px var(--spacing-2);
+		font-size: var(--text-xs);
+		color: var(--color-muted);
+		cursor: pointer;
+	}
+	.mode-seg button + button {
+		border-left: 1px solid var(--color-line);
+	}
+	.mode-seg button.active {
+		background: var(--color-accent);
+		color: var(--color-accent-fg);
+	}
+	.calc-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		font-weight: 600;
+		color: var(--color-text);
+		font-size: var(--text-sm);
 	}
 </style>

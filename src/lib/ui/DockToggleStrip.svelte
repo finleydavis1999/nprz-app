@@ -3,7 +3,7 @@
 	import { ui } from '$lib/state/ui.svelte.js';
 
 	const docks = /** @type {const} */ ([
-		{ id: 'calculator', label: 'Layers', glyph: 'ƒx', title: 'Layer calculator' },
+		{ id: 'calculator', label: 'Layer Calculator', glyph: 'ƒx', title: 'Layer calculator' },
 		{ id: 'studyArea', label: 'Study area', glyph: '⌒', title: 'Study area & lasso' }
 	]);
 </script>

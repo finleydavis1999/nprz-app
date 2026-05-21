@@ -185,6 +185,56 @@ class LayersState {
 		this.computeCalcLayer(id);
 		return id;
 	}
+	/** Run a calc expression and display result without saving.
+	 *  Result is stored temporarily and cleared on next selection change. */
+	previewCalc(expression, domain = 'node') {
+		const PREVIEW_ID = '__preview__';
+		// Validate and compute same as saveCalc but don't persist
+		const { compiled, symbols, aggs } = parseExpression(expression);
+		const sameScale = this.items.filter((i) => i.scale === selection.scale);
+		const bySlug = new Map(sameScale.map((i) => [i.slug, i]));
+		for (const { aggName, slug: aggSlug } of aggs) {
+			const dep = bySlug.get(aggSlug);
+			if (!dep) throw new Error(`Unknown layer: ${aggSlug}`);
+			if (dep.domain !== 'flow') {
+				throw new Error(`${aggName}() needs a flow layer; '${aggSlug}' is ${dep.domain}`);
+			}
+		}
+		const synthSlugs = new Set(aggs.map((a) => a.synthSlug));
+		for (const s of symbols) {
+			if (synthSlugs.has(s)) continue;
+			const dep = bySlug.get(s);
+			if (!dep) throw new Error(`Unknown layer: ${s}`);
+			if (dep.domain !== domain) {
+				throw new Error(`'${s}' is ${dep.domain}-domain; can't use in a ${domain} calc`);
+			}
+		}
+		// Remove any existing preview item
+		this.items = this.items.filter((i) => i.id !== PREVIEW_ID);
+		this.items = [
+			...this.items,
+			{
+				id: PREVIEW_ID,
+				name: '(preview)',
+				slug: '__preview__',
+				kind: 'calc',
+				domain,
+				scale: selection.scale,
+				expression,
+				preview: true
+			}
+		];
+		this.computeCalcLayer(PREVIEW_ID);
+		this.activeId = PREVIEW_ID;
+	}
+
+	clearPreview() {
+		const PREVIEW_ID = '__preview__';
+		if (this.items.some((i) => i.id === PREVIEW_ID)) {
+			this.items = this.items.filter((i) => i.id !== PREVIEW_ID);
+			if (this.activeId === PREVIEW_ID) this.activeId = null;
+		}
+	}
 
 	remove(id) {
 		this.items = this.items.filter((i) => i.id !== id);

@@ -10,7 +10,8 @@ import { layers as protomapsLayers, namedTheme } from 'protomaps-themes-base';
 
 const ATTRIBUTION =
 	'<a href="https://protomaps.com">Protomaps</a> | © <a href="https://openstreetmap.org">OpenStreetMap</a>';
-const GLYPHS = 'https://fonts.protomaps.com/{fontstack}/{range}.pbf';
+const GLYPHS = 'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf';
+const SPRITES = 'https://protomaps.github.io/basemaps-assets/sprites/v4/light';
 
 let protocolRegistered = false;
 export function registerPmtilesProtocol() {
@@ -21,9 +22,23 @@ export function registerPmtilesProtocol() {
 }
 
 export function protomapsApiStyle({ apiKey, theme = 'white' }) {
+	const baseLayers = protomapsLayers('protomaps', namedTheme(theme), { lang: 'nl' });
+
+	// Post-process: darken only genuine built-up area layers
+	const layers = baseLayers.map((layer) => {
+		if (layer.id === 'buildings') {
+			return { ...layer, paint: { ...layer.paint, 'fill-color': '#d0ccc6' } };
+		}
+		if (layer.id === 'landuse_industrial') {
+			return { ...layer, paint: { ...layer.paint, 'fill-color': '#cdc9c3' } };
+		}
+		return layer;
+	});
+
 	return {
 		version: 8,
 		glyphs: GLYPHS,
+		sprite: SPRITES,
 		sources: {
 			protomaps: {
 				type: 'vector',
@@ -33,7 +48,7 @@ export function protomapsApiStyle({ apiKey, theme = 'white' }) {
 				attribution: ATTRIBUTION
 			}
 		},
-		layers: protomapsLayers('protomaps', namedTheme(theme))
+		layers
 	};
 }
 
@@ -41,6 +56,7 @@ export function pmtilesStyle({ url, theme = 'white' }) {
 	return {
 		version: 8,
 		glyphs: GLYPHS,
+		sprite: SPRITES,
 		sources: {
 			protomaps: {
 				type: 'vector',
@@ -48,7 +64,7 @@ export function pmtilesStyle({ url, theme = 'white' }) {
 				attribution: ATTRIBUTION
 			}
 		},
-		layers: protomapsLayers('protomaps', namedTheme(theme))
+		layers: protomapsLayers('protomaps', namedTheme(theme), { lang: 'nl' })
 	};
 }
 
