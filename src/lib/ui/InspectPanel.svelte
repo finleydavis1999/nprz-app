@@ -37,7 +37,7 @@
 		return v == null ? null : v;
 	});
 
-	const flowEdgeValue = $derived.by(() => {
+	const flowEdge = $derived.by(() => {
 		if (target?.kind !== 'flow') return null;
 		return flowsByPair.get(`${target.o}|${target.d}`) ?? null;
 	});
@@ -114,14 +114,20 @@
 		</div>
 		<div class="value-row">
 			<span class="value-label">value</span>
-			<span class="value">{fmt(flowEdgeValue)}</span>
+			<span class="value">{fmt(flowEdge?.value)}</span>
 		</div>
+		{#if flowEdge?.count != null}
+			<div class="value-row">
+				<span class="value-label">count</span>
+				<span class="value">{flowEdge.count.toLocaleString()}</span>
+			</div>
+		{/if}
 		{#if flowBreaks && flowValues.length}
 			<Histogram
 				values={flowValues}
 				breaks={flowBreaks}
 				colors={flowColors}
-				highlightValue={flowEdgeValue}
+				highlightValue={flowEdge?.value ?? null}
 			/>
 		{/if}
 	{/if}

@@ -20,7 +20,7 @@ build_ovin <- function() {
       CAST(c_opl     AS INTEGER) AS opl,
       CAST(c_hhtype  AS INTEGER) AS hhtype,
       CAST(c_maatsch AS INTEGER) AS maatsch,
-      SUM(factorv)::DOUBLE AS count,
+      COUNT(*)::BIGINT     AS count,
       SUM(factorv)::DOUBLE AS weight
     FROM src.ovin20042024
     WHERE c_vgemf IS NOT NULL AND c_agemf IS NOT NULL
@@ -38,7 +38,7 @@ build_ovin <- function() {
       CAST(c_opl     AS INTEGER) AS opl,
       CAST(c_hhtype  AS INTEGER) AS hhtype,
       CAST(c_maatsch AS INTEGER) AS maatsch,
-      SUM(factorv)::DOUBLE AS count,
+      COUNT(*)::BIGINT     AS count,
       SUM(factorv)::DOUBLE AS weight
     FROM src.ovin20042024
     WHERE c_vpcf IS NOT NULL AND c_apcf IS NOT NULL
@@ -48,7 +48,7 @@ build_ovin <- function() {
 
   list(
     name        = "Verplaatsingen 2004-2024 (OViN/ODiN)",
-    description = "Onderzoek Verplaatsingen in Nederland (OViN/ODiN) 2004-2024. Per-trip records aggregated to herkomst-bestemming gemeenten. Tellingen = som van factorv (gewogen ritten over de gekozen periode).",
+    description = "Onderzoek Verplaatsingen in Nederland (OViN/ODiN) 2004-2024. Per-trip records aggregated to herkomst-bestemming gemeenten. Weergegeven waarde = som van factorv (gewogen ritten over de gekozen periode); count = aantal waarnemingen (ritten in de steekproef) waarop dat berust.",
     scales = list(
       gem = "parquet/ovin-edges-gem.parquet",
       pc4 = "parquet/ovin-edges-pc4.parquet"
@@ -120,8 +120,11 @@ build_ovin <- function() {
     ),
     countCol  = "count",
     weightCol = "weight",
-    # Each row is one trip; SUM(factorv) over the selected year range gives
-    # total trips. Divide by years*365 for trips per average day.
+    # OViN/ODiN is a weighted survey: `weight` (SUM(factorv)) is the weighted
+    # trip estimate, `count` (COUNT(*)) is the raw number of survey trips it
+    # rests on. `weighted` flags the frontend to expose that count.
+    weighted  = TRUE,
+    # The displayed value divides weight by years*365 for trips per avg. day.
     yearAggregation = "daily",
     defaultClassification = list(method = "quantile", n = 5L, palette = "YlOrRd")
   )

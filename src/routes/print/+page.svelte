@@ -37,7 +37,9 @@
 
 	// --- Flow side mirrors `/` route. Re-runs whenever flow state changes.
 	let flowResult = $state(
-		/** @type {{flows:{o:string,d:string,value:number}[], min:number, max:number} | null} */ (null)
+		/** @type {{flows:{o:string,d:string,value:number,count?:number}[], min:number, max:number, weighted?:boolean} | null} */ (
+			null
+		)
 	);
 	let centroids = $state(/** @type {Record<string, [number,number]> | null} */ (null));
 
@@ -93,7 +95,11 @@
 	});
 
 	const filteredFlows = $derived(
-		flowResult ? flowResult.flows.filter((f) => f.value >= flow.minWeight) : []
+		flowResult
+			? flowResult.flows.filter(
+					(f) => f.value >= flow.minWeight && (f.count == null || f.count >= flow.minCount)
+				)
+			: []
 	);
 
 	const flowValues = $derived(

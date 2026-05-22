@@ -39,6 +39,7 @@
 		void flow.yearMax;
 		void flow.filters;
 		void flow.minWeight;
+		void flow.minCount;
 		void flow.includeSelfLoops;
 		flow.persist();
 	});

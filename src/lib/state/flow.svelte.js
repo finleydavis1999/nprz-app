@@ -18,9 +18,11 @@ class FlowState {
 	yearMin = $state(2018);
 	yearMax = $state(2018);
 	filters = $state({});
-	// Client-side filter: only render flows whose post-aggregation value is
-	// >= minWeight. Updates do not re-query DuckDB.
+	// Client-side filters: only render flows whose post-aggregation value is
+	// >= minWeight and (on weighted layers) whose observation count is
+	// >= minCount. Updates do not re-query DuckDB.
 	minWeight = $state(0);
+	minCount = $state(0);
 	includeSelfLoops = $state(false);
 
 	load() {
@@ -36,6 +38,7 @@ class FlowState {
 			if (Number.isFinite(p?.yearMax)) this.yearMax = p.yearMax;
 			if (p?.filters && typeof p.filters === 'object') this.filters = p.filters;
 			if (Number.isFinite(p?.minWeight)) this.minWeight = p.minWeight;
+			if (Number.isFinite(p?.minCount)) this.minCount = p.minCount;
 			if (typeof p?.includeSelfLoops === 'boolean') this.includeSelfLoops = p.includeSelfLoops;
 		} catch {
 			// corrupted storage — ignore
@@ -55,6 +58,7 @@ class FlowState {
 					yearMax: this.yearMax,
 					filters: this.filters,
 					minWeight: this.minWeight,
+					minCount: this.minCount,
 					includeSelfLoops: this.includeSelfLoops
 				})
 			);

@@ -43,11 +43,12 @@ export function num(v) {
 	return n;
 }
 
-// Build the SQL `value` expression that aggregates `count` and normalises
-// across the selected year range according to the entry's yearAggregation:
-//   'sum'   (default) → SUM(count)
-//   'mean'            → SUM(count) / years     (years = yearMax - yearMin + 1)
-//   'daily'           → SUM(count) / (years * 365)
+// Build the SQL `value` expression that aggregates the dataset's weight column
+// (`entry.weightCol`, falling back to `count` for datasets that don't declare
+// one) and normalises across the selected year range per `yearAggregation`:
+//   'sum'   (default) → SUM(weight)
+//   'mean'            → SUM(weight) / years     (years = yearMax - yearMin + 1)
+//   'daily'           → SUM(weight) / (years * 365)
 export function valueExpr({ entry, yearMin, yearMax, alias = 'value' }) {
 	const years = num(yearMax) - num(yearMin) + 1;
 	if (years < 1) throw new Error(`invalid year range: ${yearMin}..${yearMax}`);
@@ -66,6 +67,7 @@ export function valueExpr({ entry, yearMin, yearMax, alias = 'value' }) {
 		default:
 			throw new Error(`unknown yearAggregation: ${mode}`);
 	}
-	const expr = divisor === 1 ? `SUM(count)::DOUBLE` : `(SUM(count)::DOUBLE / ${divisor})`;
+	const col = entry.weightCol ?? 'count';
+	const expr = divisor === 1 ? `SUM(${col})::DOUBLE` : `(SUM(${col})::DOUBLE / ${divisor})`;
 	return alias ? `${expr} AS ${alias}` : expr;
 }

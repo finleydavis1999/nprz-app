@@ -9,6 +9,7 @@
 	import FlowLayer from '$lib/map/FlowLayer.svelte';
 	import Panel from '$lib/ui/Panel.svelte';
 	import Field from '$lib/ui/Field.svelte';
+	import LogRangeFilter from '$lib/ui/LogRangeFilter.svelte';
 	import ScaleToggle from '$lib/ui/ScaleToggle.svelte';
 	import DatasetPicker from '$lib/ui/DatasetPicker.svelte';
 	import YearPicker from '$lib/ui/YearPicker.svelte';
@@ -75,7 +76,9 @@
 	);
 	const centroids = $derived(centroidsByScale[flow.scale] ?? null);
 	let flowResult = $state(
-		/** @type {{flows:{o:string,d:string,value:number}[], min:number, max:number} | null} */ (null)
+		/** @type {{flows:{o:string,d:string,value:number,count?:number}[], min:number, max:number, weighted?:boolean} | null} */ (
+			null
+		)
 	);
 	let flowQuerying = $state(false);
 	let flowError = $state(/** @type {string | null} */ (null));
@@ -151,6 +154,9 @@
 		runFlows(args)
 			.then((res) => {
 				flowResult = res;
+				// A stale min-count cutoff is meaningless on a non-weighted layer —
+				// clear it on layer switch so it can't silently hide flows.
+				if (layerChanged && !res.weighted) flow.minCount = 0;
 				if (res.flows.length === 0) {
 					// Nothing to anchor against; leave threshold for next non-empty result.
 				} else if (layerChanged || flow.minWeight > res.max) {
@@ -180,7 +186,11 @@
 	});
 
 	const filteredFlows = $derived(
-		flowResult ? flowResult.flows.filter((f) => f.value >= flow.minWeight) : []
+		flowResult
+			? flowResult.flows.filter(
+					(f) => f.value >= flow.minWeight && (f.count == null || f.count >= flow.minCount)
+				)
+			: []
 	);
 
 	const flowStatus = $derived.by(() => {
@@ -221,17 +231,26 @@
 
 	// Map keyed by `${o}|${d}` for fast lookup in the inspect panel.
 	const flowsByPair = $derived.by(() => {
-		/** @type {Map<string, number>} */
+		/** @type {Map<string, {value:number, count:number|null}>} */
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local lookup table, not directly mutated post-derivation
 		const m = new Map();
-		for (const f of filteredFlows) m.set(`${f.o}|${f.d}`, f.value);
+		for (const f of filteredFlows)
+			m.set(`${f.o}|${f.d}`, { value: f.value, count: f.count ?? null });
 		return m;
 	});
 
-	// Min-weight slider bounds — driven by the current full result so the slider
-	// doesn't jump as the user drags it.
+	// Flow-filter slider bounds — driven by the current full result so the
+	// sliders don't jump as the user drags them.
+	const flowMinValue = $derived(flowResult?.min ?? 0);
 	const flowMaxValue = $derived(flowResult?.max ?? 0);
-	const flowSliderStep = $derived(flowMaxValue > 0 ? Math.max(flowMaxValue / 200, 0.01) : 1);
+	// Weighted layers (OViN/ODiN) expose a raw observation count → Min count filter.
+	const flowWeighted = $derived(flowResult?.weighted ?? false);
+	const flowCountMax = $derived.by(() => {
+		if (!flowResult) return 0;
+		let m = 0;
+		for (const f of flowResult.flows) if (f.count != null && f.count > m) m = f.count;
+		return m;
+	});
 
 	// Geo selectors driven by current scale.
 	const geoMain = $derived(manifest?.geo?.[selection.scale]);
@@ -361,16 +380,23 @@
 				{/if}
 				<YearPicker {manifest} state={flow} section="flows" />
 				<CategoryFilters {manifest} state={flow} section="flows" />
-				<Field label="Min weight" value={flow.minWeight.toFixed(flowMaxValue < 100 ? 1 : 0)}>
-					<input
-						type="range"
-						min="0"
-						max={flowMaxValue || 1}
-						step={flowSliderStep}
-						bind:value={flow.minWeight}
-						disabled={!flowResult || flowMaxValue === 0}
+				<LogRangeFilter
+					label="Min weight"
+					bind:value={flow.minWeight}
+					floor={flowMinValue}
+					max={flowMaxValue || 1}
+					disabled={!flowResult || flowMaxValue === 0}
+				/>
+				{#if flowWeighted}
+					<LogRangeFilter
+						label="Min count"
+						bind:value={flow.minCount}
+						floor={1}
+						max={flowCountMax || 1}
+						disabled={!flowResult || flowCountMax === 0}
+						integer
 					/>
-				</Field>
+				{/if}
 				<Field label="Self-loops">
 					<input type="checkbox" bind:checked={flow.includeSelfLoops} />
 				</Field>

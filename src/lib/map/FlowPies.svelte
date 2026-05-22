@@ -28,15 +28,17 @@
 	// sum of outgoing. For each neighbor Y of selected X:
 	//   X→Y contributes outflow at X and inflow at Y.
 	//   Y→X contributes inflow at X and outflow at Y.
+	// `inCount` / `outCount` accumulate the raw observation count the same way,
+	// and stay 0 on non-weighted layers (flows there carry no `count`).
 	const pies = $derived.by(() => {
 		if (!selectedNode || !flows.length) return { items: [], max: 0 };
-		/** @type {Map<string, { inflow: number, outflow: number }>} */
+		/** @type {Map<string, { inflow: number, outflow: number, inCount: number, outCount: number }>} */
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local accumulator
 		const m = new Map();
 		const ensure = (k) => {
 			let cur = m.get(k);
 			if (!cur) {
-				cur = { inflow: 0, outflow: 0 };
+				cur = { inflow: 0, outflow: 0, inCount: 0, outCount: 0 };
 				m.set(k, cur);
 			}
 			return cur;
@@ -46,26 +48,41 @@
 			if (f.o === selectedNode && f.d !== selectedNode) {
 				ensure(selectedNode).outflow += f.value;
 				ensure(f.d).inflow += f.value;
+				if (f.count != null) {
+					ensure(selectedNode).outCount += f.count;
+					ensure(f.d).inCount += f.count;
+				}
 			} else if (f.d === selectedNode && f.o !== selectedNode) {
 				ensure(selectedNode).inflow += f.value;
 				ensure(f.o).outflow += f.value;
+				if (f.count != null) {
+					ensure(selectedNode).inCount += f.count;
+					ensure(f.o).outCount += f.count;
+				}
 			}
 		}
 		let max = 0;
-		/** @type {Array<{ code: string, inflow: number, outflow: number, total: number }>} */
+		/** @type {Array<{ code: string, inflow: number, outflow: number, inCount: number, outCount: number, total: number }>} */
 		const items = [];
 		for (const [code, v] of m) {
 			const total = v.inflow + v.outflow;
 			if (total <= 0) continue;
 			if (total > max) max = total;
-			items.push({ code, inflow: v.inflow, outflow: v.outflow, total });
+			items.push({
+				code,
+				inflow: v.inflow,
+				outflow: v.outflow,
+				inCount: v.inCount,
+				outCount: v.outCount,
+				total
+			});
 		}
 		items.sort((a, b) => b.total - a.total);
 		return { items, max };
 	});
 
 	let projected = $state(
-		/** @type {Array<{ code: string, x: number, y: number, inflow: number, outflow: number, total: number, name: string, primary: boolean }>} */ ([])
+		/** @type {Array<{ code: string, x: number, y: number, inflow: number, outflow: number, inCount: number, outCount: number, total: number, name: string, primary: boolean }>} */ ([])
 	);
 
 	/** @type {string | null} */
@@ -80,6 +97,11 @@
 		if (Math.abs(v) >= 100) return v.toFixed(0);
 		if (Math.abs(v) >= 1) return v.toFixed(1);
 		return v.toFixed(2);
+	}
+
+	// Inline " · N obs" suffix for tooltip rows (weighted layers only).
+	function obsLabel(n) {
+		return ` · ${n.toLocaleString()} obs`;
 	}
 
 	function projectAll() {
@@ -208,17 +230,29 @@
 				<div class="tt-name">{hoveredItem.name}{hoveredItem.primary ? ' — selected' : ''}</div>
 				{#if hoveredItem.primary}
 					<div class="tt-row" style:color={inflowColor}>
-						Total inflow: {fmt(hoveredItem.inflow)}
+						Total inflow: {fmt(hoveredItem.inflow)}{#if hoveredItem.inCount > 0}<span
+								class="tt-count">{obsLabel(hoveredItem.inCount)}</span
+							>{/if}
 					</div>
 					<div class="tt-row" style:color={outflowColor}>
-						Total outflow: {fmt(hoveredItem.outflow)}
+						Total outflow: {fmt(hoveredItem.outflow)}{#if hoveredItem.outCount > 0}<span
+								class="tt-count">{obsLabel(hoveredItem.outCount)}</span
+							>{/if}
 					</div>
 				{:else}
 					<div class="tt-row" style:color={inflowColor}>
-						{selectedName} → {hoveredItem.name}: {fmt(hoveredItem.inflow)}
+						{selectedName} → {hoveredItem.name}: {fmt(
+							hoveredItem.inflow
+						)}{#if hoveredItem.inCount > 0}<span class="tt-count"
+								>{obsLabel(hoveredItem.inCount)}</span
+							>{/if}
 					</div>
 					<div class="tt-row" style:color={outflowColor}>
-						{hoveredItem.name} → {selectedName}: {fmt(hoveredItem.outflow)}
+						{hoveredItem.name} → {selectedName}: {fmt(
+							hoveredItem.outflow
+						)}{#if hoveredItem.outCount > 0}<span class="tt-count"
+								>{obsLabel(hoveredItem.outCount)}</span
+							>{/if}
 					</div>
 				{/if}
 			</div>
@@ -276,5 +310,9 @@
 	}
 	.tt-row {
 		font-weight: 500;
+	}
+	.tt-count {
+		color: var(--color-muted);
+		font-weight: 400;
 	}
 </style>
