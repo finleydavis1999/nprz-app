@@ -428,7 +428,7 @@
 </div>
 
 <FloatingDock
-	title="Layer calculator"
+	title="Layer Calculator"
 	open={ui.openDocks.calculator}
 	x={ui.dockPositions.calculator.x}
 	y={ui.dockPositions.calculator.y}

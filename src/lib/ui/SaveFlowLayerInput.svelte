@@ -28,13 +28,16 @@
 
 	const effective = $derived(touched ? name : suggestion);
 	const slug = $derived(slugify(effective));
-	const taken = $derived(!!slug && layers.slugTaken(slug));
+	// Only block + warn on collisions the user typed deliberately; the
+	// untouched default is auto-uniquified at save time instead.
+	const taken = $derived(touched && !!slug && layers.slugTaken(slug));
 	const disabled = $derived(!slug || taken);
 
 	function onSubmit(e) {
 		e.preventDefault();
 		if (disabled) return;
-		layers.saveCurrentFlow(effective);
+		const finalName = touched ? effective : layers.uniqueName(effective);
+		layers.saveCurrentFlow(finalName);
 		name = '';
 		touched = false;
 	}
@@ -47,8 +50,9 @@
 			placeholder={suggestion}
 			value={touched ? name : ''}
 			oninput={(e) => {
-				touched = true;
-				name = /** @type {HTMLInputElement} */ (e.currentTarget).value;
+				const v = /** @type {HTMLInputElement} */ (e.currentTarget).value;
+				name = v;
+				touched = v.length > 0;
 			}}
 			autocomplete="off"
 		/>

@@ -45,6 +45,19 @@ export function slugify(name) {
 	return /^[A-Za-z_]/.test(cleaned) ? cleaned : `_${cleaned}`;
 }
 
+// Given a base display name, return a name whose slug is free. If the base
+// slug is taken, append a sequential integer (" 2", " 3", …) until free.
+// `isTaken` is a predicate (slug) => boolean. Falls back to "Layer" for a
+// blank base so the result is always a valid, saveable name.
+export function uniqueLayerName(base, isTaken) {
+	const root = String(base ?? '').trim() || 'Layer';
+	if (!isTaken(slugify(root))) return root;
+	for (let n = 2; ; n++) {
+		const candidate = `${root} ${n}`;
+		if (!isTaken(slugify(candidate))) return candidate;
+	}
+}
+
 const AGG_SET = new Set(AGGREGATOR_NAMES);
 
 function synthSlug(aggName, slug) {
