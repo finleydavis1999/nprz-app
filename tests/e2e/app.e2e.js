@@ -16,6 +16,19 @@ const test = base.extend({
 	sharedContext: [
 		async ({ browser }, use) => {
 			const ctx = await browser.newContext();
+			// Disable the app's background parquet prefetch: it pulls all ~289 MB
+			// of data into OPFS and starves the query each test is waiting on.
+			await ctx.addInitScript(() => {
+				window.__E2E_NO_PREFETCH__ = true;
+			});
+			// Stub the Protomaps basemap (vector tiles + glyph fonts). Every test
+			// loads the map, and these are internet round-trips no assertion
+			// depends on. An empty body is a valid empty vector-tile / glyph PBF,
+			// so maplibre draws a blank basemap without emitting load errors.
+			await ctx.route(
+				(url) => url.hostname === 'api.protomaps.com' || url.hostname === 'fonts.protomaps.com',
+				(route) => route.fulfill({ status: 200, contentType: 'application/x-protobuf', body: '' })
+			);
 			await use(ctx);
 			await ctx.close();
 		},
@@ -120,6 +133,12 @@ test.describe('app', () => {
 			},
 			{ timeout: 15_000 }
 		);
+
+		// Disable flows again — the toggle persists in the worker context's
+		// localStorage, and leaving it on makes every later test re-query OD
+		// data (and a heavy aggregation) it doesn't need.
+		await enable.uncheck();
+		await expect(page.locator('.status')).toHaveCount(1);
 	});
 
 	test('scale toggle switches gemeente → PC4', async ({ page }) => {

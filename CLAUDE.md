@@ -16,9 +16,27 @@ See `README.md` for the user-facing run/architecture docs.
 
 ## Tooling
 
-- `npm run dev` for the dev server. Use port 47356 in tests/scripts (avoids clashing with parallel projects on 5173).
-- `npm run test:e2e` runs Playwright against an auto-started dev server. Don't write throwaway `smoke.mjs` scripts — extend `tests/e2e/app.e2e.js` instead.
+- `npm run dev` for the dev server (Vite default port 5173). The e2e dev server binds a **per-worktree** port hashed from the worktree path (see `playwright.config.js`), so parallel worktrees never collide on a shared port — don't hardcode a test port.
+- `npm run test:e2e` runs Playwright against an auto-started dev server. Don't write throwaway `smoke.mjs` scripts — extend `tests/e2e/app.e2e.js` instead. The suite disables the app's background parquet prefetch (`globalThis.__E2E_NO_PREFETCH__`, set via `addInitScript`) so tests only fetch the datasets they query.
 - `npm run data` rebuilds parquet + geo + manifest. Required after editing R pipeline.
+
+## Worktrees
+
+Fresh git worktrees have no `node_modules` (it's gitignored). Don't `npm install`
+per worktree — that wastes minutes and ~530 MB each. Instead `node_modules` is
+symlinked to the main repo's copy, which also shares its warm Vite prebundle cache.
+
+- Run `bash scripts/setup-worktree.sh` once in a fresh worktree (it's idempotent
+  and fast — no-ops when `node_modules` already exists).
+- If a branch changes dependencies (`package-lock.json` differs from main), the
+  script runs a real `npm install` in the worktree instead of symlinking.
+- When you bump dependencies, `npm install` in the **main** repo so every symlinked
+  worktree picks them up.
+- The symlinked `node_modules` resolves to a path outside the worktree, so
+  `vite.config.js` widens `server.fs.allow` to the main repo root. **If Vite
+  throws a `403` / `server.fs.allow` error, that config is the fix — do NOT run
+  `npm ci` / `npm install` to "get a real node_modules"; that just discards the
+  speedup. The symlink is intentional and correct.**
 
 ## Svelte MCP
 

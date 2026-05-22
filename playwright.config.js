@@ -1,11 +1,24 @@
+import { createHash } from 'node:crypto';
 import { defineConfig } from '@playwright/test';
 
-const PORT = 47356;
+// Per-worktree dev-server port. A fixed port collides across git worktrees:
+// with `reuseExistingServer` on, a run in one worktree silently reuses another
+// worktree's dev server and tests the wrong code. Hashing the worktree path
+// gives each checkout its own stable port (range 20000-39999, clear of 5173
+// and the OS ephemeral range), so worktrees can run e2e independently.
+const portHash = createHash('sha1')
+	.update(import.meta.dirname)
+	.digest('hex');
+const PORT = 20000 + (parseInt(portHash.slice(0, 8), 16) % 20000);
 
 export default defineConfig({
 	testDir: 'tests/e2e',
 	testMatch: '**/*.e2e.{ts,js}',
-	fullyParallel: false, // single SQLite + DuckDB-WASM cache shared across tests
+	fullyParallel: true,
+	// Each Playwright worker gets its own browser context — own OPFS, DuckDB-WASM
+	// instance and localStorage — so tests parallelise without sharing state.
+	// Capped so N concurrent WASM query engines don't thrash the CPU.
+	workers: process.env.CI ? 2 : 4,
 	use: {
 		baseURL: `http://localhost:${PORT}`,
 		trace: 'retain-on-failure'

@@ -14,7 +14,10 @@ import { dataUrl } from './url.js';
 let started = false;
 
 export function schedulePrefetch() {
-	if (!browser || started) return;
+	// e2e disables the prefetch (set via Playwright addInitScript) so tests only
+	// fetch the datasets they query — the full ~289 MB sweep otherwise starves
+	// the active test query for bandwidth/OPFS.
+	if (!browser || started || globalThis.__E2E_NO_PREFETCH__) return;
 	started = true;
 	const start = () => {
 		prefetchAll().catch(() => {});
