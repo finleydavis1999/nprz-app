@@ -308,4 +308,42 @@ test.describe('app', () => {
 		const printBreaks = await page.locator('.legend .label').allTextContents();
 		expect(printBreaks).toEqual(screenBreaks);
 	});
+
+	test('smoothed layer: spatial-lag of a node layer computes via the worker', async ({ page }) => {
+		// Save a node layer to act as the smoothing input.
+		const saveRow = page
+			.locator('details.panel', { hasText: 'Node data' })
+			.locator('form.save-row');
+		await saveRow.locator('input[type="text"]').fill('e2eBase');
+		await saveRow.getByRole('button', { name: 'Save layer', exact: true }).click();
+
+		// Open the layer calculator dock.
+		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
+		const dock = page.locator('.dock', { hasText: 'Layer Calculator' });
+		await expect(dock).toBeVisible();
+
+		// The saved node filter layer (◆) resolves to a numeric feature count.
+		const baseRow = dock.locator('.layer').filter({
+			has: page.locator('.kind', { hasText: '◆' })
+		});
+		await expect(baseRow.locator('.meta')).toHaveText(/^\d+$/, { timeout: 15_000 });
+
+		// The "Add smoothed layer" form auto-fills a default name and auto-picks
+		// the node layer as input, so it submits immediately without typing.
+		const smoothForm = dock.locator('form.calc', { hasText: 'Add smoothed layer' });
+		await smoothForm.getByRole('button', { name: 'Add smoothed layer' }).click();
+
+		// A smooth-kind row (◈) appears with a numeric count — the spatial-lag
+		// Worker fetched RD centroids and produced a value per node.
+		const smoothRow = dock.locator('.layer').filter({
+			has: page.locator('.kind', { hasText: '◈' })
+		});
+		await expect(smoothRow.locator('.meta')).toHaveText(/^\d+$/, { timeout: 15_000 });
+
+		// Clean up so sibling tests see an empty layer list.
+		await smoothRow.locator('.del').click();
+		await baseRow.locator('.del').click();
+		await expect(dock.locator('.layer', { hasText: 'e2e' })).toHaveCount(0);
+		await dock.locator('.dock-close').click();
+	});
 });

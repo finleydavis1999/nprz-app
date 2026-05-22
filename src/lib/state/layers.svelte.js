@@ -5,10 +5,12 @@
 // year-range/filters → OD edge values). A calc layer is a math.js expression
 // over other layer slugs of the same domain, optionally wrapping flow inputs
 // with `inflow(...)` / `outflow(...)` / `net(...)` to produce node-domain
-// output.
+// output. A smooth layer is a spatially-lagged (distance-decay-weighted)
+// version of a node-domain input layer, computed in a Web Worker from RD
+// centroids.
 //
 // Persisted to localStorage under v2; v1 records (no domain) are migrated to
-// node-domain on first load.
+// node-domain on first load. Smooth-layer fields are additive — no schema bump.
 
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { runChoropleth } from '$lib/data/query.js';
@@ -20,9 +22,12 @@ import {
 	uniqueLayerName
 } from '$lib/data/layer-calc.js';
 import { aggregateFlow } from '$lib/data/flow-aggregations.js';
+import { computeSmooth } from '$lib/data/spatial-lag-client.js';
+import { dataUrl } from '$lib/data/url.js';
 import { selection } from './selection.svelte.js';
 import { flow } from './flow.svelte.js';
 import { queryResult } from './query-result.svelte.js';
+import { manifestState } from './manifest.svelte.js';
 
 const STORAGE_KEY_V1 = 'nprz.layers.v1';
 const STORAGE_KEY = 'nprz.layers.v2';
@@ -38,13 +43,16 @@ function flowEdgeKey(o, d) {
 class LayersState {
 	/** @type {Array<{
 	 *   id: string, name: string, slug: string,
-	 *   kind: 'filter' | 'calc', domain: 'node' | 'flow',
+	 *   kind: 'filter' | 'calc' | 'smooth', domain: 'node' | 'flow',
 	 *   scale: string,
 	 *   dataset?: string, year?: number,
 	 *   yearMin?: number, yearMax?: number,
 	 *   filters?: Record<string, number[]>,
 	 *   includeSelfLoops?: boolean,
-	 *   expression?: string
+	 *   expression?: string,
+	 *   inputId?: string, kernel?: 'exp' | 'gauss' | 'power',
+	 *   decay?: number, maxDist?: number,
+	 *   mode?: 'mean' | 'sum', includeSelf?: boolean
 	 * }>} */
 	items = $state([]);
 	/** @type {SvelteMap<string, Map<string, number>>} */
@@ -54,6 +62,10 @@ class LayersState {
 	/** @type {SvelteMap<string, string>} */
 	errors = new SvelteMap();
 	activeId = $state(/** @type {string | null} */ (null));
+	/** Per-smooth-layer request token — discards results of superseded async
+	 *  recomputes (e.g. from rapid slider drags). Non-reactive bookkeeping.
+	 *  @type {Map<string, number>} */
+	#smoothSeq = new Map();
 
 	load() {
 		if (typeof localStorage === 'undefined') return;
@@ -196,6 +208,40 @@ class LayersState {
 		return id;
 	}
 
+	/** Create a smooth layer: a spatially-lagged version of a node-domain input
+	 *  layer. `decay` and `maxDist` are in kilometres; `decay` is instead a
+	 *  positive exponent when `kernel` is 'power'. */
+	saveSmooth(name, { inputId, kernel, decay, maxDist, mode, includeSelf }) {
+		const slug = slugify(name);
+		if (!slug) throw new Error('Name required');
+		if (this.slugTaken(slug)) throw new Error('Name already in use');
+		const input = this.items.find((i) => i.id === inputId);
+		if (!input) throw new Error('Pick an input layer to smooth');
+		if ((input.domain ?? 'node') !== 'node') throw new Error('Input must be a node layer');
+		if (input.scale !== selection.scale) throw new Error('Input layer is on a different scale');
+		const id = newId();
+		this.items = [
+			...this.items,
+			{
+				id,
+				name: name.trim(),
+				slug,
+				kind: 'smooth',
+				domain: 'node',
+				scale: selection.scale,
+				inputId,
+				kernel,
+				decay,
+				maxDist,
+				mode,
+				includeSelf
+			}
+		];
+		this.persist();
+		this.computeSmoothLayer(id);
+		return id;
+	}
+
 	remove(id) {
 		this.items = this.items.filter((i) => i.id !== id);
 		this.results.delete(id);
@@ -211,9 +257,22 @@ class LayersState {
 		this.persist();
 	}
 
+	/** Recompute every derived (smooth + calc) layer at the current scale. */
 	recomputeCalcs() {
-		for (const l of this.items) {
-			if (l.kind === 'calc' && l.scale === selection.scale) this.computeCalcLayer(l.id);
+		this.#recomputeDerived(0);
+	}
+
+	/** Recompute derived layers from index `fromIdx` onward, in array order.
+	 *  Array (creation) order is a valid dependency order — a layer can only
+	 *  reference inputs that already existed when it was created. Smooth layers
+	 *  are `await`ed (async, Worker-backed) so a later calc that references one
+	 *  sees its fresh result. */
+	async #recomputeDerived(fromIdx = 0) {
+		for (let k = fromIdx; k < this.items.length; k++) {
+			const l = this.items[k];
+			if (!l || l.scale !== selection.scale) continue;
+			if (l.kind === 'smooth') await this.computeSmoothLayer(l.id);
+			else if (l.kind === 'calc') this.computeCalcLayer(l.id);
 		}
 	}
 
@@ -304,6 +363,68 @@ class LayersState {
 		}
 	}
 
+	/** Compute a smooth layer — a distance-decay-weighted aggregate of its input
+	 *  layer's per-node values. Async: the work runs in the spatial-lag Worker.
+	 *  A per-layer request token discards results of superseded calls. */
+	async computeSmoothLayer(id) {
+		const layer = this.items.find((i) => i.id === id);
+		if (!layer || layer.kind !== 'smooth') return;
+		const seq = (this.#smoothSeq.get(id) ?? 0) + 1;
+		this.#smoothSeq.set(id, seq);
+		this.loading.add(id);
+		this.errors.delete(id);
+		try {
+			const input = this.items.find((i) => i.id === layer.inputId);
+			if (!input) {
+				this.errors.set(id, 'input layer was deleted');
+				return;
+			}
+			const values = this.results.get(layer.inputId);
+			if (!values) {
+				this.errors.set(id, `input not computed: ${input.name}`);
+				return;
+			}
+			const geo = manifestState.data?.geo?.[layer.scale];
+			const version = manifestState.data?.version;
+			if (!geo?.centroidsRd || !version) {
+				this.errors.set(id, 'centroids unavailable');
+				return;
+			}
+			// Layer params are in km; the worker and RD centroids are in metres.
+			// The power kernel's `decay` is a dimensionless exponent — not scaled.
+			const out = await computeSmooth({
+				scale: layer.scale,
+				centroidsUrl: dataUrl(geo.centroidsRd, version),
+				maxDist: layer.maxDist * 1000,
+				kernel: layer.kernel,
+				decay: layer.kernel === 'power' ? layer.decay : layer.decay * 1000,
+				mode: layer.mode,
+				includeSelf: layer.includeSelf,
+				values: Object.fromEntries(values)
+			});
+			if (this.#smoothSeq.get(id) !== seq) return; // superseded by a newer request
+			this.results.set(id, out);
+			this.errors.delete(id);
+		} catch (e) {
+			if (this.#smoothSeq.get(id) === seq) {
+				this.errors.set(id, /** @type {Error} */ (e)?.message ?? String(e));
+			}
+		} finally {
+			if (this.#smoothSeq.get(id) === seq) this.loading.delete(id);
+		}
+	}
+
+	/** Patch a saved smooth layer's parameters, then recompute it and any later
+	 *  layers that may depend on it. `persist: false` is used for live slider
+	 *  drags (commit on `change` persists once). */
+	updateSmoothParams(id, patch, { persist = true } = {}) {
+		const idx = this.items.findIndex((x) => x.id === id);
+		if (idx < 0 || this.items[idx].kind !== 'smooth') return;
+		this.items = this.items.map((x, k) => (k === idx ? { ...x, ...patch } : x));
+		if (persist) this.persist();
+		this.#recomputeDerived(idx);
+	}
+
 	/** Re-run all filter layers at the current scale, then evaluate all calc layers.
 	 *  If the active layer is on a different scale, clear it (fall back to live preview). */
 	async refreshAll() {
@@ -312,15 +433,12 @@ class LayersState {
 			const active = this.items.find((i) => i.id === this.activeId);
 			if (active && active.scale !== scale) this.activeId = null;
 		}
-		const matching = this.items.filter((i) => i.scale === scale);
-		for (const layer of matching) {
-			if (layer.kind === 'filter') {
+		for (const layer of this.items) {
+			if (layer.kind === 'filter' && layer.scale === scale) {
 				await this.refreshFilterLayer(layer.id);
 			}
 		}
-		for (const layer of matching) {
-			if (layer.kind === 'calc') this.computeCalcLayer(layer.id);
-		}
+		await this.#recomputeDerived(0);
 	}
 }
 

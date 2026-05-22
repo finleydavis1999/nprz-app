@@ -1,5 +1,6 @@
 <script>
 	import Field from './Field.svelte';
+	import KernelCurve from './KernelCurve.svelte';
 	import { selection } from '$lib/state/selection.svelte.js';
 	import { layers } from '$lib/state/layers.svelte.js';
 	import { slugify } from '$lib/data/layer-calc.js';
@@ -18,11 +19,48 @@
 	/** @type {'inflow' | 'outflow' | 'net'} */
 	let flowAgg = $state('inflow');
 
+	// Smoothed-layer form state.
+	let smName = $state('');
+	let smNameTouched = $state(false);
+	let smInputId = $state(/** @type {string | null} */ (null));
+	/** @type {'exp' | 'gauss' | 'power'} */
+	let smKernel = $state('exp');
+	let smDecay = $state(1);
+	let smMaxDist = $state(5);
+	/** @type {'mean' | 'sum'} */
+	let smMode = $state('mean');
+	let smIncludeSelf = $state(true);
+	let smError = $state(/** @type {string | null} */ (null));
+
 	const sameScale = $derived(layers.items.filter((l) => l.scale === selection.scale));
 	const slugKind = $derived(new Map(sameScale.map((l) => [l.slug, l.kind])));
 	const slugDomain = $derived(new Map(sameScale.map((l) => [l.slug, l.domain ?? 'node'])));
 	const nodeLayers = $derived(sameScale.filter((l) => (l.domain ?? 'node') === 'node'));
 	const flowLayers = $derived(sameScale.filter((l) => l.domain === 'flow'));
+
+	// The chosen input falls back to the first eligible layer when it no longer
+	// exists (after a scale switch or a deletion) — derived, so no effect needed.
+	const smInput = $derived(
+		smInputId && nodeLayers.some((l) => l.id === smInputId)
+			? smInputId
+			: (nodeLayers[0]?.id ?? null)
+	);
+
+	// Default smoothed-layer name — same approach as the calc form: a uniquified
+	// suggestion ("<input> smoothed") shown as a placeholder, used verbatim until
+	// the user types their own (smNameTouched).
+	const smInputName = $derived(nodeLayers.find((l) => l.id === smInput)?.name ?? '');
+	const smSuggestion = $derived(
+		layers.uniqueName(smInputName ? `${smInputName} smoothed` : 'Smoothed 1')
+	);
+	const smEffective = $derived(smNameTouched ? smName : smSuggestion);
+
+	// The decay control means a length scale (km) for exp/gauss and a positive
+	// exponent for power — its label and range adapt to the kernel.
+	const decayLabel = $derived(smKernel === 'power' ? 'Exponent β' : 'Decay d₀ (km)');
+	const decayMin = $derived(smKernel === 'power' ? 0.5 : 0.1);
+	const decayMax = $derived(smKernel === 'power' ? 3 : 10);
+	const decayStep = $derived(0.1);
 
 	// Default name for a calc layer: sequential "Calculation N" based on how
 	// many calc layers already exist at this scale. Shown as a placeholder;
@@ -57,6 +95,51 @@
 		} catch (err) {
 			calcError = /** @type {Error} */ (err)?.message ?? String(err);
 		}
+	}
+
+	// Switching kernel changes what `decay` means (length scale ↔ exponent), so
+	// reset it to a sensible default when crossing the power boundary.
+	function onCreateKernel(kernel) {
+		const crossesPower = (smKernel === 'power') !== (kernel === 'power');
+		smKernel = kernel;
+		if (crossesPower) smDecay = kernel === 'power' ? 2 : 1;
+	}
+
+	function onSaveSmooth(e) {
+		e.preventDefault();
+		smError = null;
+		// smEffective is the typed name, or the already-uniquified default.
+		const finalName = smEffective;
+		const slug = slugify(finalName);
+		if (!slug) {
+			smError = 'Name required';
+			return;
+		}
+		if (smNameTouched && layers.slugTaken(slug)) {
+			smError = 'Name already in use';
+			return;
+		}
+		try {
+			layers.saveSmooth(finalName, {
+				inputId: smInput,
+				kernel: smKernel,
+				decay: smDecay,
+				maxDist: smMaxDist,
+				mode: smMode,
+				includeSelf: smIncludeSelf
+			});
+			smName = '';
+			smNameTouched = false;
+		} catch (err) {
+			smError = /** @type {Error} */ (err)?.message ?? String(err);
+		}
+	}
+
+	// Editing a saved smooth layer's kernel — same decay-reset rule as the form.
+	function onSmoothKernel(layer, kernel) {
+		const crossesPower = (layer.kernel === 'power') !== (kernel === 'power');
+		const patch = crossesPower ? { kernel, decay: kernel === 'power' ? 2 : 1 } : { kernel };
+		layers.updateSmoothParams(layer.id, patch);
 	}
 
 	function fieldLabel(fieldId) {
@@ -249,7 +332,13 @@
 						{isActive ? '●' : '○'}
 					</button>
 					<span class="kind" title="{layer.domain ?? 'node'} {layer.kind}"
-						>{layer.kind === 'calc' ? 'ƒ' : layer.domain === 'flow' ? '~' : '◆'}</span
+						>{layer.kind === 'smooth'
+							? '◈'
+							: layer.kind === 'calc'
+								? 'ƒ'
+								: layer.domain === 'flow'
+									? '~'
+									: '◆'}</span
 					>
 					<button
 						type="button"
@@ -314,11 +403,96 @@
 										<span class="k">Filters</span><span class="muted">none</span>
 									</div>
 								{/if}
-							{:else}
+							{:else if layer.kind === 'calc'}
 								<div class="line"><span class="k">Scale</span><span>{layer.scale}</span></div>
 								<div class="line">
 									<span class="k">Expression</span><code>{layer.expression}</code>
 								</div>
+							{:else}
+								{@const input = layers.items.find((i) => i.id === layer.inputId)}
+								<div class="line">
+									<span class="k">Input</span>
+									<span class:muted={!input}>{input ? input.name : '— deleted —'}</span>
+								</div>
+								<div class="line"><span class="k">Scale</span><span>{layer.scale}</span></div>
+								<Field label="Kernel">
+									<select
+										value={layer.kernel}
+										onchange={(e) => onSmoothKernel(layer, e.currentTarget.value)}
+									>
+										<option value="exp">exponential</option>
+										<option value="gauss">gaussian</option>
+										<option value="power">power</option>
+									</select>
+								</Field>
+								<Field
+									label={layer.kernel === 'power' ? 'Exponent β' : 'Decay d₀ (km)'}
+									value={layer.decay}
+								>
+									<input
+										type="range"
+										min={layer.kernel === 'power' ? 0.5 : 0.1}
+										max={layer.kernel === 'power' ? 3 : 10}
+										step="0.1"
+										value={layer.decay}
+										oninput={(e) =>
+											layers.updateSmoothParams(
+												layer.id,
+												{ decay: +e.currentTarget.value },
+												{ persist: false }
+											)}
+										onchange={(e) =>
+											layers.updateSmoothParams(layer.id, { decay: +e.currentTarget.value })}
+									/>
+								</Field>
+								<Field label="Max distance (km)" value={layer.maxDist}>
+									<input
+										type="range"
+										min="0.5"
+										max="100"
+										step="0.5"
+										value={layer.maxDist}
+										oninput={(e) =>
+											layers.updateSmoothParams(
+												layer.id,
+												{ maxDist: +e.currentTarget.value },
+												{ persist: false }
+											)}
+										onchange={(e) =>
+											layers.updateSmoothParams(layer.id, { maxDist: +e.currentTarget.value })}
+									/>
+								</Field>
+								<KernelCurve kernel={layer.kernel} decay={layer.decay} maxDist={layer.maxDist} />
+								<Field label="Output">
+									<div class="seg" role="radiogroup" aria-label="Smoothing output">
+										<button
+											type="button"
+											class:active={layer.mode === 'mean'}
+											aria-pressed={layer.mode === 'mean'}
+											onclick={() => layers.updateSmoothParams(layer.id, { mode: 'mean' })}
+										>
+											Average
+										</button>
+										<button
+											type="button"
+											class:active={layer.mode === 'sum'}
+											aria-pressed={layer.mode === 'sum'}
+											onclick={() => layers.updateSmoothParams(layer.id, { mode: 'sum' })}
+										>
+											Sum
+										</button>
+									</div>
+								</Field>
+								<Field label="Include self">
+									<input
+										type="checkbox"
+										checked={layer.includeSelf}
+										onchange={(e) =>
+											layers.updateSmoothParams(layer.id, {
+												includeSelf: e.currentTarget.checked
+											})}
+									/>
+								</Field>
 							{/if}
 						</div>
 					{/if}
@@ -399,7 +573,9 @@
 								onclick={() => insertChipAtCaret(l.slug)}
 								title={disabled ? 'Switch output to Node to use this' : 'Click to insert'}
 							>
-								<span class="chip-kind">{l.kind === 'calc' ? 'ƒ' : '◆'}</span>
+								<span class="chip-kind"
+									>{l.kind === 'calc' ? 'ƒ' : l.kind === 'smooth' ? '◈' : '◆'}</span
+								>
 								<span class="chip-slug">{l.slug}</span>
 							</button>
 						{/each}
@@ -454,6 +630,79 @@
 			<p class="err-msg">{calcError}</p>
 		{/if}
 		<button type="submit" class="primary" disabled={!calcExpr}>Add calculation</button>
+	</form>
+
+	<form class="calc" onsubmit={onSaveSmooth}>
+		<div class="calc-head">Add smoothed layer</div>
+		{#if nodeLayers.length === 0}
+			<p class="hint">Save a node layer first — smoothing needs a node-domain input.</p>
+		{:else}
+			<Field label="Input">
+				<select value={smInput} onchange={(e) => (smInputId = e.currentTarget.value)}>
+					{#each nodeLayers as l (l.id)}
+						<option value={l.id}>{l.name}</option>
+					{/each}
+				</select>
+			</Field>
+			<Field label="Kernel">
+				<select value={smKernel} onchange={(e) => onCreateKernel(e.currentTarget.value)}>
+					<option value="exp">exponential</option>
+					<option value="gauss">gaussian</option>
+					<option value="power">power</option>
+				</select>
+			</Field>
+			<Field label={decayLabel} value={smDecay}>
+				<input type="range" min={decayMin} max={decayMax} step={decayStep} bind:value={smDecay} />
+			</Field>
+			<Field label="Max distance (km)" value={smMaxDist}>
+				<input type="range" min="0.5" max="100" step="0.5" bind:value={smMaxDist} />
+			</Field>
+			<KernelCurve kernel={smKernel} decay={smDecay} maxDist={smMaxDist} />
+			<Field label="Output">
+				<div class="seg" role="radiogroup" aria-label="Smoothing output">
+					<button
+						type="button"
+						class:active={smMode === 'mean'}
+						aria-pressed={smMode === 'mean'}
+						onclick={() => (smMode = 'mean')}
+					>
+						Average
+					</button>
+					<button
+						type="button"
+						class:active={smMode === 'sum'}
+						aria-pressed={smMode === 'sum'}
+						onclick={() => (smMode = 'sum')}
+					>
+						Sum
+					</button>
+				</div>
+			</Field>
+			<Field label="Include self">
+				<input type="checkbox" bind:checked={smIncludeSelf} />
+			</Field>
+			<Field label="Name">
+				<input
+					type="text"
+					placeholder={smSuggestion}
+					value={smNameTouched ? smName : ''}
+					oninput={(e) => {
+						const v = /** @type {HTMLInputElement} */ (e.currentTarget).value;
+						smName = v;
+						smNameTouched = v.length > 0;
+						smError = null;
+					}}
+					autocomplete="off"
+				/>
+			</Field>
+			{#if !smError}
+				<p class="hint" title="Slug used in expressions">Saves as → {slugify(smEffective)}</p>
+			{/if}
+			{#if smError}
+				<p class="err-msg">{smError}</p>
+			{/if}
+			<button type="submit" class="primary" disabled={!smInput}> Add smoothed layer </button>
+		{/if}
 	</form>
 </div>
 
