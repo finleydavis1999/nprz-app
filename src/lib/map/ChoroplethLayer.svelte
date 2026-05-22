@@ -1,6 +1,7 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { getMapContext } from './context.js';
+	import { beforeId, ANCHOR_DATA } from './layer-order.js';
 
 	let {
 		sourceId,
@@ -68,18 +69,27 @@
 		if (!map.getSource(sourceId)) {
 			map.addSource(sourceId, { type: 'geojson', data: geoUrl, promoteId });
 		}
-		map.addLayer({
-			id: fillId,
-			type: 'fill',
-			source: sourceId,
-			paint: { 'fill-color': fillColor, 'fill-opacity': fillOpacity }
-		});
-		map.addLayer({
-			id: lineId,
-			type: 'line',
-			source: sourceId,
-			paint: { 'line-color': lineColor, 'line-width': lineWidth }
-		});
+		// `beforeId` keeps these below the basemap labels (and the built-up /
+		// province overlays) — see layer-order.js.
+		const anchor = beforeId(map, ANCHOR_DATA);
+		map.addLayer(
+			{
+				id: fillId,
+				type: 'fill',
+				source: sourceId,
+				paint: { 'fill-color': fillColor, 'fill-opacity': fillOpacity }
+			},
+			anchor
+		);
+		map.addLayer(
+			{
+				id: lineId,
+				type: 'line',
+				source: sourceId,
+				paint: { 'line-color': lineColor, 'line-width': lineWidth }
+			},
+			anchor
+		);
 		installed = true;
 
 		const onSourceData = (e) => {

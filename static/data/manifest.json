@@ -1204,5 +1204,16 @@
       "centroidsRd": "geo/gem-centroids-rd.json",
       "idProp": "area_code"
     }
+  },
+  "overlays": {
+    "provinces": {
+      "geojson": "geo/provincies.geojson",
+      "topojson": "geo/provincies.topo.json",
+      "idProp": "area_code"
+    },
+    "builtup": {
+      "geojson": "geo/builtup.geojson",
+      "topojson": "geo/builtup.topo.json"
+    }
   }
 }

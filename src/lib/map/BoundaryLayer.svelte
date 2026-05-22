@@ -1,6 +1,7 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { getMapContext } from './context.js';
+	import { beforeId, ANCHOR_DATA } from './layer-order.js';
 
 	let {
 		sourceId,
@@ -22,16 +23,19 @@
 		if (!map.getSource(sourceId)) {
 			map.addSource(sourceId, { type: 'geojson', data: geoUrl, promoteId });
 		}
-		map.addLayer({
-			id: lineId,
-			type: 'line',
-			source: sourceId,
-			paint: {
-				'line-color': lineColor,
-				'line-width': lineWidth,
-				'line-opacity': lineOpacity
-			}
-		});
+		map.addLayer(
+			{
+				id: lineId,
+				type: 'line',
+				source: sourceId,
+				paint: {
+					'line-color': lineColor,
+					'line-width': lineWidth,
+					'line-opacity': lineOpacity
+				}
+			},
+			beforeId(map, ANCHOR_DATA)
+		);
 		installed = true;
 	});
 

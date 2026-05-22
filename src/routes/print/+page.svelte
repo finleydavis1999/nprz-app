@@ -13,6 +13,7 @@
 	import { displayed } from '$lib/state/layers.svelte.js';
 	import { flow, flowCartography } from '$lib/state/flow.svelte.js';
 	import { ui } from '$lib/state/ui.svelte.js';
+	import { mapLayers } from '$lib/state/map-layers.svelte.js';
 	import { geoNames } from '$lib/state/geo-names.svelte.js';
 	import { runFlows } from '$lib/data/flowQuery.js';
 
@@ -22,6 +23,8 @@
 	const manifest = $derived(manifestState.data);
 	const dataset = $derived(manifest?.datasets?.[selection.dataset]);
 	const geo = $derived(manifest?.geo?.[selection.scale]);
+	const overlays = $derived(manifest?.overlays);
+	const geoBoundary = $derived(manifest?.geo?.[mapLayers.boundaryScale]);
 	const yearLabel = $derived(
 		dataset?.fields?.year?.values?.find((y) => y.id === selection.year)?.label ?? selection.year
 	);
@@ -168,6 +171,22 @@
 					flowMode={ui.flowMode}
 					{nameByCode}
 					labelLayer={ui.showLabels}
+					boundaryUrl={mapLayers.boundary && geoBoundary?.topojson
+						? dataUrl(geoBoundary.topojson, manifest.version)
+						: null}
+					boundaryColor={mapLayers.boundaryColor}
+					boundaryWidth={mapLayers.boundaryWidth}
+					boundaryOpacity={mapLayers.boundaryOpacity}
+					builtupUrl={mapLayers.builtup && overlays?.builtup?.topojson
+						? dataUrl(overlays.builtup.topojson, manifest.version)
+						: null}
+					builtupColor={mapLayers.builtupColor}
+					builtupOpacity={mapLayers.builtupOpacity}
+					provinceUrl={mapLayers.provinces && overlays?.provinces?.topojson
+						? dataUrl(overlays.provinces.topojson, manifest.version)
+						: null}
+					provinceColor={mapLayers.provinceColor}
+					provinceWidth={mapLayers.provinceWidth}
 				/>
 			{:else if !manifest || displayed.loading}
 				<p class="hint">Loading…</p>

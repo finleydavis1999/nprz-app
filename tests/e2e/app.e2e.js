@@ -63,7 +63,7 @@ test.describe('app', () => {
 
 		// Left sidebar: data inputs.
 		const leftTitles = await page.locator('.sidebar-left details.panel summary').allTextContents();
-		expect(leftTitles).toEqual(['Scale', 'Node data', 'Flow data', 'Boundary overlay']);
+		expect(leftTitles).toEqual(['Scale', 'Node data', 'Flow data', 'Map layers']);
 
 		// Right sidebar: inspect + cartography.
 		const rightTitles = await page
@@ -128,11 +128,11 @@ test.describe('app', () => {
 	});
 
 	test('flow toggle adds curved flow lines to the map', async ({ page }) => {
-		// Open Flow data panel and tick the enable checkbox.
+		// Open Flow data panel and flip the enable switch.
 		const flowPanel = page.locator('details.panel', { hasText: 'Flow data' });
 		await flowPanel.locator('summary').click();
 		const enable = flowPanel
-			.locator('label.field', { hasText: 'Show flows' })
+			.locator('label.toggle', { hasText: 'Show flows' })
 			.locator('input[type="checkbox"]');
 		await enable.check();
 
@@ -162,6 +162,94 @@ test.describe('app', () => {
 		// data (and a heavy aggregation) it doesn't need.
 		await enable.uncheck();
 		await expect(page.locator('.status')).toHaveCount(1);
+	});
+
+	test('map layers panel toggles boundary, built-up, province, and basemap labels', async ({
+		page
+	}) => {
+		const panel = page.locator('details.panel', { hasText: 'Map layers' });
+		// The fixed dock toggle strip overlaps the bottom-left; scroll the panel
+		// to the top of the sidebar so it and its controls clear the strip.
+		const summary = panel.locator('summary');
+		await summary.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+		await summary.click();
+
+		const toggle = (name) =>
+			panel.locator('label.toggle', { hasText: name }).locator('input[type="checkbox"]');
+
+		// Boundary overlay appears as a map layer.
+		await toggle('Boundary overlay').check();
+		await page.waitForFunction(() => !!window.__map?.getLayer?.('overlay-gem-boundary-line'), {
+			timeout: 15_000
+		});
+
+		// Built-up area fill appears as a map layer.
+		await toggle('Built-up areas').check();
+		await page.waitForFunction(() => !!window.__map?.getLayer?.('builtup-fill'), {
+			timeout: 15_000
+		});
+
+		// Province boundary line appears as a map layer.
+		await toggle('Province boundaries').check();
+		await page.waitForFunction(() => !!window.__map?.getLayer?.('provinces-line'), {
+			timeout: 15_000
+		});
+
+		// Cartographic z-order, bottom -> top:
+		// choropleth fill < boundary overlay < built-up < province < basemap labels.
+		const order = await page.evaluate(() => {
+			const m = window.__map;
+			const ids = m.getLayersOrder();
+			const firstLabel = ids.find((id) => {
+				const l = m.getLayer(id);
+				return l && l.source === 'protomaps' && l.type === 'symbol';
+			});
+			return {
+				choropleth: ids.indexOf('choropleth-gem-fill'),
+				boundary: ids.indexOf('overlay-gem-boundary-line'),
+				builtup: ids.indexOf('builtup-fill'),
+				province: ids.indexOf('provinces-line'),
+				firstLabel: ids.indexOf(firstLabel)
+			};
+		});
+		expect(order.choropleth).toBeGreaterThan(-1);
+		expect(order.choropleth).toBeLessThan(order.boundary);
+		expect(order.boundary).toBeLessThan(order.builtup);
+		expect(order.builtup).toBeLessThan(order.province);
+		expect(order.province).toBeLessThan(order.firstLabel);
+
+		// Basemap labels are on by default; toggling off hides every Protomaps
+		// symbol layer, toggling back on restores them.
+		const symVisibilities = () =>
+			page.evaluate(() => {
+				const m = window.__map;
+				return m
+					.getLayersOrder()
+					.map((id) => m.getLayer(id))
+					.filter((l) => l && l.source === 'protomaps' && l.type === 'symbol')
+					.map((l) => m.getLayoutProperty(l.id, 'visibility') ?? 'visible');
+			});
+		const initial = await symVisibilities();
+		expect(initial.length).toBeGreaterThan(0);
+		expect(initial.every((v) => v === 'visible')).toBe(true);
+
+		const labels = toggle('Basemap labels');
+		await labels.uncheck();
+		await expect.poll(symVisibilities).toEqual(initial.map(() => 'none'));
+		await labels.check();
+		await expect.poll(symVisibilities).toEqual(initial);
+
+		// Boundary, built-up + province stay enabled — they carry through to the
+		// d3-geo print/export view as their own SVG layer groups.
+		await page.click('a.tool.print');
+		await page.waitForURL('/print');
+		await page
+			.locator('.sheet svg g.provinces path')
+			.first()
+			.waitFor({ state: 'attached', timeout: 15_000 });
+		expect(await page.locator('.sheet svg g.boundary path').count()).toBeGreaterThan(0);
+		expect(await page.locator('.sheet svg g.builtup path').count()).toBeGreaterThan(0);
+		expect(await page.locator('.sheet svg g.provinces path').count()).toBeGreaterThan(0);
 	});
 
 	test('scale toggle switches gemeente → PC4', async ({ page }) => {

@@ -5,10 +5,14 @@
 	import MapView from '$lib/map/Map.svelte';
 	import ChoroplethLayer from '$lib/map/ChoroplethLayer.svelte';
 	import BoundaryLayer from '$lib/map/BoundaryLayer.svelte';
+	import BuiltUpLayer from '$lib/map/BuiltUpLayer.svelte';
+	import ProvinceLayer from '$lib/map/ProvinceLayer.svelte';
+	import BasemapLabelsLayer from '$lib/map/BasemapLabelsLayer.svelte';
 	import LassoTool from '$lib/map/LassoTool.svelte';
 	import FlowLayer from '$lib/map/FlowLayer.svelte';
 	import Panel from '$lib/ui/Panel.svelte';
 	import Field from '$lib/ui/Field.svelte';
+	import Toggle from '$lib/ui/Toggle.svelte';
 	import LogRangeFilter from '$lib/ui/LogRangeFilter.svelte';
 	import ScaleToggle from '$lib/ui/ScaleToggle.svelte';
 	import DatasetPicker from '$lib/ui/DatasetPicker.svelte';
@@ -16,7 +20,7 @@
 	import CategoryFilters from '$lib/ui/CategoryFilters.svelte';
 	import SaveLayerInput from '$lib/ui/SaveLayerInput.svelte';
 	import SaveFlowLayerInput from '$lib/ui/SaveFlowLayerInput.svelte';
-	import OverlayControls from '$lib/ui/OverlayControls.svelte';
+	import MapLayerControls from '$lib/ui/MapLayerControls.svelte';
 	import StudyAreaControls from '$lib/ui/StudyAreaControls.svelte';
 	import ClassificationControls from '$lib/ui/ClassificationControls.svelte';
 	import LayerCalculator from '$lib/ui/LayerCalculator.svelte';
@@ -34,7 +38,7 @@
 	import { stepExpression } from '$lib/cartography/expression.js';
 	import { selection } from '$lib/state/selection.svelte.js';
 	import { cartography } from '$lib/state/cartography.svelte.js';
-	import { overlay } from '$lib/state/overlay.svelte.js';
+	import { mapLayers } from '$lib/state/map-layers.svelte.js';
 	import { manifestState } from '$lib/state/manifest.svelte.js';
 	import { queryResult } from '$lib/state/query-result.svelte.js';
 	import { studyArea } from '$lib/state/study-area.svelte.js';
@@ -254,7 +258,7 @@
 
 	// Geo selectors driven by current scale.
 	const geoMain = $derived(manifest?.geo?.[selection.scale]);
-	const geoOverlay = $derived(overlay.scale ? manifest?.geo?.[overlay.scale] : null);
+	const geoOverlay = $derived(mapLayers.boundary ? manifest?.geo?.[mapLayers.boundaryScale] : null);
 </script>
 
 <div style="position: fixed; inset: 0;">
@@ -278,14 +282,14 @@
 				{/if}
 			{/key}
 			{#if geoOverlay}
-				{#key overlay.scale}
+				{#key mapLayers.boundaryScale}
 					<BoundaryLayer
-						sourceId="overlay-{overlay.scale}"
+						sourceId="overlay-{mapLayers.boundaryScale}"
 						geoUrl={dataUrl(geoOverlay.geojson, manifest.version)}
 						promoteId={geoOverlay.idProp}
-						lineColor={overlay.color}
-						lineWidth={overlay.width}
-						lineOpacity={overlay.opacity}
+						lineColor={mapLayers.boundaryColor}
+						lineWidth={mapLayers.boundaryWidth}
+						lineOpacity={mapLayers.boundaryOpacity}
 					/>
 				{/key}
 			{/if}
@@ -319,6 +323,23 @@
 				flowScale={flow.scale}
 				flowEnabled={flow.enabled}
 			/>
+			{#if mapLayers.builtup && manifest.overlays?.builtup}
+				<BuiltUpLayer
+					sourceId="builtup"
+					geoUrl={dataUrl(manifest.overlays.builtup.geojson, manifest.version)}
+					color={mapLayers.builtupColor}
+					opacity={mapLayers.builtupOpacity}
+				/>
+			{/if}
+			{#if mapLayers.provinces && manifest.overlays?.provinces}
+				<ProvinceLayer
+					sourceId="provinces"
+					geoUrl={dataUrl(manifest.overlays.provinces.geojson, manifest.version)}
+					lineColor={mapLayers.provinceColor}
+					lineWidth={mapLayers.provinceWidth}
+				/>
+			{/if}
+			<BasemapLabelsLayer visible={mapLayers.labels} />
 		{/if}
 	</MapView>
 </div>
@@ -368,9 +389,7 @@
 	<Panel title="Flow data" open={false}>
 		{#if manifest}
 			<div class="stack">
-				<Field label="Show flows">
-					<input type="checkbox" bind:checked={flow.enabled} />
-				</Field>
+				<Toggle bind:checked={flow.enabled} label="Show flows" />
 				<DatasetPicker {manifest} state={flow} section="flows" />
 				{#if flow.enabled && !flowScaleAvailable}
 					<p class="hint">
@@ -408,8 +427,8 @@
 		{/if}
 	</Panel>
 
-	<Panel title="Boundary overlay" open={false}>
-		<OverlayControls />
+	<Panel title="Map layers" open={false}>
+		<MapLayerControls />
 	</Panel>
 </div>
 
@@ -434,9 +453,7 @@
 	<Panel title="Node cartography">
 		<div class="stack">
 			<ClassificationControls />
-			<Field label="Show names">
-				<input type="checkbox" bind:checked={ui.showLabels} />
-			</Field>
+			<Toggle bind:checked={ui.showLabels} label="Show names" />
 			{#if breaks}
 				<Legend {breaks} {colors} />
 			{/if}
@@ -497,6 +514,9 @@
 	}
 	.sidebar-left {
 		left: var(--spacing-4);
+		/* Scroll clearance so the last panel isn't trapped behind the fixed
+		   DockToggleStrip pinned to the bottom-left. */
+		padding-bottom: calc(var(--spacing-4) * 4);
 	}
 	.sidebar-right {
 		right: var(--spacing-4);

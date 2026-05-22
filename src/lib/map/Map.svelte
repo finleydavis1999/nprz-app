@@ -1,6 +1,7 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { setMapContext } from './context.js';
+	import { installLayerAnchors } from './layer-order.js';
 
 	let {
 		center = [5.3, 52.1],
@@ -39,6 +40,8 @@
 		const ready = () => {
 			if (resolved) return;
 			resolved = true;
+			// Install z-order anchors before any child layer component mounts.
+			installLayerAnchors(map);
 			ctx.map = map;
 			ctx.ready = true;
 		};

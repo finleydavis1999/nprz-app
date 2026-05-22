@@ -6,11 +6,28 @@
 //   - emptyStyle({background}):           plain background fallback
 import maplibregl from 'maplibre-gl';
 import * as pmtilesPkg from 'pmtiles';
-import { layers as protomapsLayers, namedTheme } from 'protomaps-themes-base';
+import {
+	layers as protomapsLayers,
+	labels as protomapsLabels,
+	namedTheme
+} from 'protomaps-themes-base';
 
 const ATTRIBUTION =
 	'<a href="https://protomaps.com">Protomaps</a> | © <a href="https://openstreetmap.org">OpenStreetMap</a>';
 const GLYPHS = 'https://fonts.protomaps.com/{fontstack}/{range}.pbf';
+// Language for basemap place/road labels.
+const LABEL_LANG = 'nl';
+
+// Full protomaps layer set: base (fills/lines) + label (symbol) layers on top.
+// `layers()` in protomaps-themes-base v4 excludes labels; they come from the
+// separate `labels()` export. Keeping the labels last puts them above the base
+// map; app layers insert below them via layer-order.js anchors.
+function styleLayers(theme) {
+	return [
+		...protomapsLayers('protomaps', namedTheme(theme)),
+		...protomapsLabels('protomaps', theme, LABEL_LANG)
+	];
+}
 
 let protocolRegistered = false;
 export function registerPmtilesProtocol() {
@@ -33,7 +50,7 @@ export function protomapsApiStyle({ apiKey, theme = 'white' }) {
 				attribution: ATTRIBUTION
 			}
 		},
-		layers: protomapsLayers('protomaps', namedTheme(theme))
+		layers: styleLayers(theme)
 	};
 }
 
@@ -48,7 +65,7 @@ export function pmtilesStyle({ url, theme = 'white' }) {
 				attribution: ATTRIBUTION
 			}
 		},
-		layers: protomapsLayers('protomaps', namedTheme(theme))
+		layers: styleLayers(theme)
 	};
 }
 

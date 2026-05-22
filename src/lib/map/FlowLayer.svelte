@@ -1,6 +1,7 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { getMapContext } from './context.js';
+	import { beforeId, ANCHOR_DATA } from './layer-order.js';
 	import { bezierLine } from '$lib/cartography/curve.js';
 	import { stepExpression } from '$lib/cartography/expression.js';
 
@@ -104,29 +105,36 @@
 		if (!map.getSource(sourceId)) {
 			map.addSource(sourceId, { type: 'geojson', data: featureCollection });
 		}
-		map.addLayer({
-			id: casingId,
-			type: 'line',
-			source: sourceId,
-			paint: {
-				'line-color': '#ffffff',
-				'line-width': casingWidthExpr,
-				'line-opacity': casingOpacity,
-				'line-blur': 0.5
+		const anchor = beforeId(map, ANCHOR_DATA);
+		map.addLayer(
+			{
+				id: casingId,
+				type: 'line',
+				source: sourceId,
+				paint: {
+					'line-color': '#ffffff',
+					'line-width': casingWidthExpr,
+					'line-opacity': casingOpacity,
+					'line-blur': 0.5
+				},
+				layout: { 'line-cap': 'round', 'line-join': 'round' }
 			},
-			layout: { 'line-cap': 'round', 'line-join': 'round' }
-		});
-		map.addLayer({
-			id: lineId,
-			type: 'line',
-			source: sourceId,
-			paint: {
-				'line-color': colorExpr,
-				'line-width': widthExpr,
-				'line-opacity': opacity
+			anchor
+		);
+		map.addLayer(
+			{
+				id: lineId,
+				type: 'line',
+				source: sourceId,
+				paint: {
+					'line-color': colorExpr,
+					'line-width': widthExpr,
+					'line-opacity': opacity
+				},
+				layout: { 'line-cap': 'round', 'line-join': 'round' }
 			},
-			layout: { 'line-cap': 'round', 'line-join': 'round' }
-		});
+			anchor
+		);
 		installed = true;
 	});
 

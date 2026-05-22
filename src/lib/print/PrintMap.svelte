@@ -37,7 +37,19 @@
 		// Optional name lookup for pie labels (Map<area_code, name>).
 		nameByCode = /** @type {Map<string, string> | null} */ (null),
 		piesEnabled = true,
-		labelLayer = false
+		labelLayer = false,
+		// Cartographic overlays (optional): separate RD TopoJSON files drawn with
+		// the same projection. Pass a URL to enable the layer; null omits it.
+		boundaryUrl = /** @type {string | null} */ (null),
+		boundaryColor = '#222222',
+		boundaryWidth = 1.0,
+		boundaryOpacity = 0.8,
+		builtupUrl = /** @type {string | null} */ (null),
+		builtupColor = '#888888',
+		builtupOpacity = 0.5,
+		provinceUrl = /** @type {string | null} */ (null),
+		provinceColor = '#555555',
+		provinceWidth = 1.5
 	} = $props();
 
 	// Derive objectKey from the URL when not explicitly given.
@@ -69,6 +81,61 @@
 		if (!obj) return null;
 		return feature(topo, obj);
 	});
+
+	// Overlay TopoJSON (province boundary, built-up area) — each a separate file
+	// fetched on demand and drawn with the same RD projection as the main map.
+	// The R pipeline names the TopoJSON object after the file basename.
+	function topoToFeatures(t, url) {
+		if (!t || !url) return null;
+		const key = url.split('/').pop()?.split('.')[0];
+		const obj = key ? t.objects?.[key] : null;
+		return obj ? feature(t, obj) : null;
+	}
+
+	let boundaryTopo = $state(null);
+	$effect(() => {
+		boundaryTopo = null;
+		if (!boundaryUrl) return;
+		fetch(boundaryUrl)
+			.then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+			.then((t) => {
+				boundaryTopo = t;
+			})
+			.catch(() => {
+				boundaryTopo = null;
+			});
+	});
+	const boundaryFeatures = $derived(topoToFeatures(boundaryTopo, boundaryUrl));
+
+	let builtupTopo = $state(null);
+	$effect(() => {
+		builtupTopo = null;
+		if (!builtupUrl) return;
+		fetch(builtupUrl)
+			.then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+			.then((t) => {
+				builtupTopo = t;
+			})
+			.catch(() => {
+				builtupTopo = null;
+			});
+	});
+	const builtupFeatures = $derived(topoToFeatures(builtupTopo, builtupUrl));
+
+	let provinceTopo = $state(null);
+	$effect(() => {
+		provinceTopo = null;
+		if (!provinceUrl) return;
+		fetch(provinceUrl)
+			.then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+			.then((t) => {
+				provinceTopo = t;
+			})
+			.catch(() => {
+				provinceTopo = null;
+			});
+	});
+	const provinceFeatures = $derived(topoToFeatures(provinceTopo, provinceUrl));
 
 	const projection = $derived.by(() => {
 		if (!features) return null;
@@ -230,6 +297,40 @@
 				/>
 			{/each}
 		</g>
+		{#if boundaryFeatures}
+			<g class="boundary">
+				{#each boundaryFeatures.features as f, i (i)}
+					<path
+						d={path(f)}
+						fill="none"
+						stroke={boundaryColor}
+						stroke-width={boundaryWidth}
+						stroke-opacity={boundaryOpacity}
+						stroke-linejoin="round"
+					/>
+				{/each}
+			</g>
+		{/if}
+		{#if builtupFeatures}
+			<g class="builtup">
+				{#each builtupFeatures.features as f, i (i)}
+					<path d={path(f)} fill={builtupColor} fill-opacity={builtupOpacity} stroke="none" />
+				{/each}
+			</g>
+		{/if}
+		{#if provinceFeatures}
+			<g class="provinces">
+				{#each provinceFeatures.features as f, i (i)}
+					<path
+						d={path(f)}
+						fill="none"
+						stroke={provinceColor}
+						stroke-width={provinceWidth}
+						stroke-linejoin="round"
+					/>
+				{/each}
+			</g>
+		{/if}
 		{#if effectiveFlows.length > 0 && flowBreaks}
 			<g class="flows" {opacity}>
 				{#each [...effectiveFlows].sort((a, b) => b.value - a.value) as f, i (`${f.o}|${f.d}|${i}`)}
