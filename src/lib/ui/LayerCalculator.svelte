@@ -28,16 +28,16 @@
 	// many calc layers already exist at this scale. Shown as a placeholder;
 	// never pre-filled into the input's real value, so editing clears it.
 	const calcCount = $derived(sameScale.filter((l) => l.kind === 'calc').length);
-	const calcSuggestion = $derived(`Calculation ${calcCount + 1}`);
+	// Uniquified so the gray placeholder matches the name the layer will get.
+	const calcSuggestion = $derived(layers.uniqueName(`Calculation ${calcCount + 1}`));
 	const calcEffective = $derived(calcNameTouched ? calcName : calcSuggestion);
 
 	function onSaveCalc(e) {
 		e.preventDefault();
 		calcError = null;
 		if (!calcExpr) return;
-		// Untouched name → auto-uniquified default; typed name is used as-is
-		// and a deliberate collision is still surfaced as an error.
-		const finalName = calcNameTouched ? calcEffective : layers.uniqueName(calcSuggestion);
+		// calcEffective is the typed name, or the already-uniquified default.
+		const finalName = calcEffective;
 		const slug = slugify(finalName);
 		if (!slug) {
 			calcError = 'Name required';
@@ -380,19 +380,6 @@
 				spellcheck="false"
 			></div>
 		</Field>
-		{#if calcDomain === 'node' && flowLayers.length > 0}
-			<Field label="Flow as">
-				<select
-					bind:value={flowAgg}
-					class="agg-select"
-					title="Aggregator used when inserting a flow layer"
-				>
-					<option value="inflow">inflow( )</option>
-					<option value="outflow">outflow( )</option>
-					<option value="net">net( )</option>
-				</select>
-			</Field>
-		{/if}
 		{#if sameScale.length > 0}
 			{#if nodeLayers.length > 0}
 				<div class="palette-group">
@@ -443,6 +430,19 @@
 						{/each}
 					</div>
 				</div>
+				{#if calcDomain === 'node'}
+					<Field label="Flow as">
+						<select
+							bind:value={flowAgg}
+							class="agg-select"
+							title="Aggregator used when inserting a flow layer"
+						>
+							<option value="inflow">inflow( )</option>
+							<option value="outflow">outflow( )</option>
+							<option value="net">net( )</option>
+						</select>
+					</Field>
+				{/if}
 			{/if}
 		{:else}
 			<p class="hint">Save a layer first to use it in a calculation.</p>
