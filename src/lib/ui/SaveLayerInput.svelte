@@ -12,10 +12,13 @@
 	let touched = $state(false);
 
 	const suggestion = $derived(defaultLayerName(manifest, selection));
-	const effective = $derived(touched ? name : suggestion);
+	// The untouched default is uniquified up front, so the gray placeholder
+	// always shows the exact name the layer will be saved as.
+	const effective = $derived(touched ? name : layers.uniqueName(suggestion));
 
 	const slug = $derived(slugify(effective));
-	const taken = $derived(!!slug && layers.slugTaken(slug));
+	// Only block + warn on collisions the user typed deliberately.
+	const taken = $derived(touched && !!slug && layers.slugTaken(slug));
 	const disabled = $derived(!slug || taken);
 
 	function onSubmit(e) {
@@ -31,11 +34,12 @@
 	<Field label="Save as">
 		<input
 			type="text"
-			placeholder={suggestion}
+			placeholder={effective}
 			value={touched ? name : ''}
 			oninput={(e) => {
-				touched = true;
-				name = /** @type {HTMLInputElement} */ (e.currentTarget).value;
+				const v = /** @type {HTMLInputElement} */ (e.currentTarget).value;
+				name = v;
+				touched = v.length > 0;
 			}}
 			autocomplete="off"
 		/>

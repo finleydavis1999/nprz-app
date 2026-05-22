@@ -13,7 +13,12 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { runChoropleth } from '$lib/data/query.js';
 import { runFlows } from '$lib/data/flowQuery.js';
-import { parseExpression, evaluateOverAreas, slugify } from '$lib/data/layer-calc.js';
+import {
+	parseExpression,
+	evaluateOverAreas,
+	slugify,
+	uniqueLayerName
+} from '$lib/data/layer-calc.js';
 import { aggregateFlow } from '$lib/data/flow-aggregations.js';
 import { selection } from './selection.svelte.js';
 import { flow } from './flow.svelte.js';
@@ -92,6 +97,11 @@ class LayersState {
 
 	slugTaken(slug, exceptId = null) {
 		return this.items.some((i) => i.slug === slug && i.id !== exceptId);
+	}
+
+	/** Resolve a base display name to one whose slug is free (auto-suffixed). */
+	uniqueName(base) {
+		return uniqueLayerName(base, (s) => this.slugTaken(s));
 	}
 
 	/** Snapshot the current node-side `selection` into a filter layer. */

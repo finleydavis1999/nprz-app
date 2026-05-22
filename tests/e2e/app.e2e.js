@@ -71,9 +71,9 @@ test.describe('app', () => {
 			.allTextContents();
 		expect(rightTitles).toEqual(['Inspect', 'Node cartography', 'Flow cartography']);
 
-		// Dock toggle strip exposes Layers, Study area, and Print.
+		// Dock toggle strip exposes Layer Calculator, Study area, and Print.
 		await expect(page.locator('.strip')).toBeVisible();
-		await expect(page.locator('.strip .tool', { hasText: 'Layers' })).toBeVisible();
+		await expect(page.locator('.strip .tool', { hasText: 'Layer Calculator' })).toBeVisible();
 		await expect(page.locator('.strip .tool', { hasText: 'Study area' })).toBeVisible();
 		await expect(page.locator('.strip a.tool.print', { hasText: 'Print' })).toBeVisible();
 
@@ -82,13 +82,36 @@ test.describe('app', () => {
 	});
 
 	test('layer calculator dock opens from the toggle strip', async ({ page }) => {
-		await expect(page.locator('.dock', { hasText: 'Layer calculator' })).toHaveCount(0);
-		await page.locator('.strip .tool', { hasText: 'Layers' }).click();
-		const dock = page.locator('.dock', { hasText: 'Layer calculator' });
+		await expect(page.locator('.dock', { hasText: 'Layer Calculator' })).toHaveCount(0);
+		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
+		const dock = page.locator('.dock', { hasText: 'Layer Calculator' });
 		await expect(dock).toBeVisible();
 		// Close button hides it. Cleans up persisted dock state for sibling tests.
 		await dock.locator('.dock-close').click();
-		await expect(page.locator('.dock', { hasText: 'Layer calculator' })).toHaveCount(0);
+		await expect(page.locator('.dock', { hasText: 'Layer Calculator' })).toHaveCount(0);
+	});
+
+	test('saving a layer is one click and auto-uniquifies the default name', async ({ page }) => {
+		// Node data panel is open by default — save the current selection twice
+		// with no typing. The button must never lock up on the default collision.
+		const saveBtn = page.locator('.sidebar-left .save-row button', { hasText: 'Save layer' });
+		await expect(saveBtn).toBeEnabled();
+		await saveBtn.click();
+		await expect(saveBtn).toBeEnabled();
+		await saveBtn.click();
+
+		// Both saves land as separate layers; the second gets a sequential suffix.
+		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
+		const dock = page.locator('.dock', { hasText: 'Layer Calculator' });
+		const names = dock.locator('ul.layers .layer:not(.live) .name');
+		await expect(names).toHaveCount(2);
+		const first = (await names.nth(0).textContent())?.trim();
+		expect((await names.nth(1).textContent())?.trim()).toBe(`${first} 2`);
+
+		// Clean up persisted layers + dock state for sibling tests.
+		const del = dock.locator('ul.layers .layer:not(.live) .del');
+		while (await del.count()) await del.first().click();
+		await dock.locator('.dock-close').click();
 	});
 
 	test('clicking a node populates the inspect panel', async ({ page }) => {

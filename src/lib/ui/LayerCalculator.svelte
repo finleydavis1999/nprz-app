@@ -7,6 +7,7 @@
 	let { manifest } = $props();
 
 	let calcName = $state('');
+	let calcNameTouched = $state(false);
 	let calcExpr = $state('');
 	let calcError = $state(/** @type {string | null} */ (null));
 	let expandedId = $state(/** @type {string | null} */ (null));
@@ -23,21 +24,33 @@
 	const nodeLayers = $derived(sameScale.filter((l) => (l.domain ?? 'node') === 'node'));
 	const flowLayers = $derived(sameScale.filter((l) => l.domain === 'flow'));
 
+	// Default name for a calc layer: sequential "Calculation N" based on how
+	// many calc layers already exist at this scale. Shown as a placeholder;
+	// never pre-filled into the input's real value, so editing clears it.
+	const calcCount = $derived(sameScale.filter((l) => l.kind === 'calc').length);
+	// Uniquified so the gray placeholder matches the name the layer will get.
+	const calcSuggestion = $derived(layers.uniqueName(`Calculation ${calcCount + 1}`));
+	const calcEffective = $derived(calcNameTouched ? calcName : calcSuggestion);
+
 	function onSaveCalc(e) {
 		e.preventDefault();
 		calcError = null;
-		const slug = slugify(calcName);
+		if (!calcExpr) return;
+		// calcEffective is the typed name, or the already-uniquified default.
+		const finalName = calcEffective;
+		const slug = slugify(finalName);
 		if (!slug) {
 			calcError = 'Name required';
 			return;
 		}
-		if (layers.slugTaken(slug)) {
+		if (calcNameTouched && layers.slugTaken(slug)) {
 			calcError = 'Name already in use';
 			return;
 		}
 		try {
-			layers.saveCalc(calcName, calcExpr, calcDomain);
+			layers.saveCalc(finalName, calcExpr, calcDomain);
 			calcName = '';
+			calcNameTouched = false;
 			calcExpr = '';
 			// eslint-disable-next-line svelte/no-dom-manipulating -- editor is a controlled contenteditable, not part of Svelte's tree
 			if (exprEditor) exprEditor.replaceChildren();
@@ -93,6 +106,7 @@
 	}
 
 	function syncFromDom() {
+		calcError = null;
 		calcExpr = serializeEditor();
 		// Browsers leave stray <br>s and empty text nodes after delete-all;
 		// normalise so the placeholder pseudo-element renders cleanly.
@@ -204,7 +218,7 @@
 
 <div class="stack">
 	{#if layers.items.length === 0}
-		<p class="hint">No saved layers yet — save one from the Data panel above.</p>
+		<p class="hint">No saved layers yet — save one from the Data panel to start calculating.</p>
 	{:else}
 		<ul class="layers">
 			<li class="layer live" class:active={layers.activeId === null}>
@@ -336,7 +350,18 @@
 			</div>
 		</Field>
 		<Field label="Name">
-			<input type="text" placeholder="e.g. youthShare" bind:value={calcName} autocomplete="off" />
+			<input
+				type="text"
+				placeholder={calcSuggestion}
+				value={calcNameTouched ? calcName : ''}
+				oninput={(e) => {
+					const v = /** @type {HTMLInputElement} */ (e.currentTarget).value;
+					calcName = v;
+					calcNameTouched = v.length > 0;
+					calcError = null;
+				}}
+				autocomplete="off"
+			/>
 		</Field>
 		<Field label="Expression">
 			<div
@@ -355,19 +380,6 @@
 				spellcheck="false"
 			></div>
 		</Field>
-		{#if calcDomain === 'node' && flowLayers.length > 0}
-			<Field label="Flow as">
-				<select
-					bind:value={flowAgg}
-					class="agg-select"
-					title="Aggregator used when inserting a flow layer"
-				>
-					<option value="inflow">inflow( )</option>
-					<option value="outflow">outflow( )</option>
-					<option value="net">net( )</option>
-				</select>
-			</Field>
-		{/if}
 		{#if sameScale.length > 0}
 			{#if nodeLayers.length > 0}
 				<div class="palette-group">
@@ -418,14 +430,30 @@
 						{/each}
 					</div>
 				</div>
+				{#if calcDomain === 'node'}
+					<Field label="Flow as">
+						<select
+							bind:value={flowAgg}
+							class="agg-select"
+							title="Aggregator used when inserting a flow layer"
+						>
+							<option value="inflow">inflow( )</option>
+							<option value="outflow">outflow( )</option>
+							<option value="net">net( )</option>
+						</select>
+					</Field>
+				{/if}
 			{/if}
 		{:else}
-			<p class="hint">Save at least one layer from the Data panel first.</p>
+			<p class="hint">Save a layer first to use it in a calculation.</p>
+		{/if}
+		{#if calcExpr && !calcError}
+			<p class="hint" title="Slug used in expressions">Saves as → {slugify(calcEffective)}</p>
 		{/if}
 		{#if calcError}
 			<p class="err-msg">{calcError}</p>
 		{/if}
-		<button type="submit" class="primary" disabled={!calcName || !calcExpr}>Add layer</button>
+		<button type="submit" class="primary" disabled={!calcExpr}>Add calculation</button>
 	</form>
 </div>
 
