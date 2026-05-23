@@ -1,14 +1,10 @@
 <script>
 	import { selection } from '$lib/state/selection.svelte.js';
-
-	const scales = [
-		{ id: 'pc4', label: 'PC4' },
-		{ id: 'gem', label: 'Gemeente' }
-	];
+	import { SCALES } from '$lib/scales.js';
 </script>
 
 <div class="seg">
-	{#each scales as s (s.id)}
+	{#each SCALES as s (s.id)}
 		<label class:active={selection.scale === s.id}>
 			<input type="radio" name="scale" value={s.id} bind:group={selection.scale} />
 			{s.label}

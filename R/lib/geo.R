@@ -23,12 +23,17 @@ simplify_to_geojson_and_topojson <- function(x, geojson_out, topojson_out, keep_
 
   if (dissolve) x <- rmapshaper::ms_dissolve(x)
 
+  # `st_collection_extract("POLYGON")` drops the stray line/point slivers that
+  # `st_make_valid` can produce on the full-detail (`*_niet_gegeneraliseerd`)
+  # CBS sources — leaves the geometry uniformly polygon/multipolygon.
   simplified <- rmapshaper::ms_simplify(
     x,
     keep        = keep_pct / 100,
     keep_shapes = TRUE,
     method      = "vis"   # Visvalingam (mapshaper default)
-  ) |> sf::st_make_valid()
+  ) |>
+    sf::st_make_valid() |>
+    sf::st_collection_extract("POLYGON")
 
   # TopoJSON: kept in source CRS (RD/EPSG:28992) for the d3-geo print path.
   # Quantize to ~3 m precision (NL bbox is ~300 km, 3e5 / 1e5 = 3 m); without
@@ -41,7 +46,8 @@ simplify_to_geojson_and_topojson <- function(x, geojson_out, topojson_out, keep_
     quantization = 1e5
   )
 
-  # GeoJSON: WGS84 for MapLibre. `precision` quantizes coordinates when set.
+  # GeoJSON: WGS84 for MapLibre. `precision` quantizes coordinates when set
+  # (4 ≈ 11 m, well below choropleth display sensitivity).
   layer_opts <- if (is.null(precision)) character(0) else paste0("COORDINATE_PRECISION=", precision)
   sf::st_write(
     sf::st_transform(simplified, 4326),

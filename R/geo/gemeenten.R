@@ -1,8 +1,10 @@
 # Gemeente polygons → simplified WGS84 GeoJSON + simplified RD TopoJSON.
 #
-# Uses CBS gemeente_gegeneraliseerd (342 features, 2025 boundaries). Polygons
-# include water bodies (IJsselmeer, Markermeer, Oosterschelde, Waddenzee) as
-# part of municipal territory — accepted as-is per project decision.
+# Uses CBS gemeente_niet_gegeneraliseerd (342 features, 2025 boundaries) — the
+# full-detail layer; the `gegeneraliseerd` layer is too coarse (median ~105
+# vertices/polygon) and triangulates small coastal/island gemeenten when
+# re-simplified. Polygons include water bodies (IJsselmeer, Markermeer,
+# Oosterschelde, Waddenzee) as part of municipal territory.
 suppressPackageStartupMessages({
   library(sf)
   library(dplyr)
@@ -12,14 +14,15 @@ source("R/lib/geo.R")
 
 build_gemeenten <- function() {
   src <- "raw-data/geo-data/cbsgebiedsindelingen2025.gpkg"
-  gem <- sf::read_sf(src, layer = "gemeente_gegeneraliseerd") |>
+  gem <- sf::read_sf(src, layer = "gemeente_niet_gegeneraliseerd") |>
     dplyr::transmute(area_code = statcode, name = statnaam)
 
   simplify_to_geojson_and_topojson(
     gem,
     geojson_out  = "static/data/geo/gemeenten.geojson",
     topojson_out = "static/data/geo/gemeenten.topo.json",
-    keep_pct     = 15
+    keep_pct     = 12,
+    precision    = 4
   )
 
   # Centroids (point-on-surface for safety with multi-part / coastal polygons).

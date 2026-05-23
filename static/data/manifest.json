@@ -1,5 +1,5 @@
 {
-  "version": "2026-05-20T07:42:27Z",
+  "version": "2026-05-23T20:39:17Z",
   "datasets": {
     "demographics": {
       "name": "Persoonsgegevens 2018",
@@ -629,12 +629,327 @@
         "n": 5,
         "palette": "YlOrRd"
       }
+    },
+    "cbs-vk100": {
+      "name": "CBS Vierkant 100m 2023",
+      "description": "CBS 100m-grid 2023, geaggregeerd per gebied via cel-centro<c3><af>de-in-polygoon. Aantallen worden gesommeerd; percentages, gemiddelden en afstanden zijn inwoner- of woninggewogen gemiddelden. Cellen <5 inwoners zijn door CBS onderdrukt.",
+      "warning": "Data in this set has been aggregated up from the '100m vierkant' scale. Absolute counts are summed, other variables are using a population-weighted average. Keep that in mind when interpreting the data.",
+      "scales": {
+        "buurt": "parquet/cbs-vk100-buurt.parquet",
+        "pc4": "parquet/cbs-vk100-pc4.parquet",
+        "gem": "parquet/cbs-vk100-gem.parquet"
+      },
+      "fields": {
+        "year": {
+          "type": "single",
+          "label": "Jaar",
+          "values": [
+            {
+              "id": 2023,
+              "label": "2023"
+            }
+          ],
+          "default": 2023,
+          "min": 2023,
+          "max": 2023
+        },
+        "variable": {
+          "type": "single",
+          "label": "Variabele",
+          "values": [
+            {
+              "id": 1,
+              "label": "Inwoners",
+              "group": "Bevolking"
+            },
+            {
+              "id": 2,
+              "label": "Mannen",
+              "group": "Bevolking"
+            },
+            {
+              "id": 3,
+              "label": "Vrouwen",
+              "group": "Bevolking"
+            },
+            {
+              "id": 4,
+              "label": "Inwoners 0 tot 15 jaar",
+              "group": "Bevolking"
+            },
+            {
+              "id": 5,
+              "label": "Inwoners 15 tot 25 jaar",
+              "group": "Bevolking"
+            },
+            {
+              "id": 6,
+              "label": "Inwoners 25 tot 45 jaar",
+              "group": "Bevolking"
+            },
+            {
+              "id": 7,
+              "label": "Inwoners 45 tot 65 jaar",
+              "group": "Bevolking"
+            },
+            {
+              "id": 8,
+              "label": "Inwoners 65 jaar en ouder",
+              "group": "Bevolking"
+            },
+            {
+              "id": 9,
+              "label": "Geboorten",
+              "group": "Bevolking"
+            },
+            {
+              "id": 10,
+              "label": "% geboren in NL, herkomst Nederland",
+              "group": "Bevolking"
+            },
+            {
+              "id": 11,
+              "label": "% geboren in NL, herkomst overig Europa",
+              "group": "Bevolking"
+            },
+            {
+              "id": 12,
+              "label": "% geboren in NL, herkomst buiten Europa",
+              "group": "Bevolking"
+            },
+            {
+              "id": 13,
+              "label": "% geboren buiten NL, herkomst Europa",
+              "group": "Bevolking"
+            },
+            {
+              "id": 14,
+              "label": "% geboren buiten NL, herkomst buiten Europa",
+              "group": "Bevolking"
+            },
+            {
+              "id": 15,
+              "label": "Particuliere huishoudens",
+              "group": "Huishoudens"
+            },
+            {
+              "id": 16,
+              "label": "Eenpersoonshuishoudens",
+              "group": "Huishoudens"
+            },
+            {
+              "id": 17,
+              "label": "Meerpersoonshuishoudens zonder kinderen",
+              "group": "Huishoudens"
+            },
+            {
+              "id": 18,
+              "label": "Eenouderhuishoudens",
+              "group": "Huishoudens"
+            },
+            {
+              "id": 19,
+              "label": "Tweeouderhuishoudens",
+              "group": "Huishoudens"
+            },
+            {
+              "id": 20,
+              "label": "Gemiddelde huishoudensgrootte",
+              "group": "Huishoudens"
+            },
+            {
+              "id": 21,
+              "label": "Woningen",
+              "group": "Wonen"
+            },
+            {
+              "id": 22,
+              "label": "Woningen bouwjaar voor 1945",
+              "group": "Wonen"
+            },
+            {
+              "id": 23,
+              "label": "Woningen bouwjaar 1945 tot 1965",
+              "group": "Wonen"
+            },
+            {
+              "id": 24,
+              "label": "Woningen bouwjaar 1965 tot 1975",
+              "group": "Wonen"
+            },
+            {
+              "id": 25,
+              "label": "Woningen bouwjaar 1975 tot 1985",
+              "group": "Wonen"
+            },
+            {
+              "id": 26,
+              "label": "Woningen bouwjaar 1985 tot 1995",
+              "group": "Wonen"
+            },
+            {
+              "id": 27,
+              "label": "Woningen bouwjaar 1995 tot 2005",
+              "group": "Wonen"
+            },
+            {
+              "id": 28,
+              "label": "Woningen bouwjaar 2005 tot 2015",
+              "group": "Wonen"
+            },
+            {
+              "id": 29,
+              "label": "Woningen bouwjaar 2015 en later",
+              "group": "Wonen"
+            },
+            {
+              "id": 30,
+              "label": "Meergezinswoningen",
+              "group": "Wonen"
+            },
+            {
+              "id": 31,
+              "label": "% koopwoningen",
+              "group": "Wonen"
+            },
+            {
+              "id": 32,
+              "label": "% huurwoningen",
+              "group": "Wonen"
+            },
+            {
+              "id": 33,
+              "label": "Huurwoningen van woningcorporaties",
+              "group": "Wonen"
+            },
+            {
+              "id": 34,
+              "label": "Niet-bewoonde woningen",
+              "group": "Wonen"
+            },
+            {
+              "id": 35,
+              "label": "Gemiddelde WOZ-waarde woning",
+              "group": "Wonen"
+            },
+            {
+              "id": 36,
+              "label": "Gemiddeld gasverbruik per woning",
+              "group": "Energie"
+            },
+            {
+              "id": 37,
+              "label": "Gemiddeld elektriciteitsverbruik per woning",
+              "group": "Energie"
+            },
+            {
+              "id": 38,
+              "label": "Personen met uitkering (onder AOW-leeftijd)",
+              "group": "Inkomen"
+            },
+            {
+              "id": 39,
+              "label": "Afstand tot grote supermarkt (km)",
+              "group": "Afstand tot voorzieningen"
+            },
+            {
+              "id": 40,
+              "label": "Afstand tot overige dagelijkse levensmiddelen (km)",
+              "group": "Afstand tot voorzieningen"
+            },
+            {
+              "id": 41,
+              "label": "Afstand tot huisartsenpraktijk (km)",
+              "group": "Afstand tot voorzieningen"
+            },
+            {
+              "id": 42,
+              "label": "Afstand tot kinderdagverblijf (km)",
+              "group": "Afstand tot voorzieningen"
+            },
+            {
+              "id": 43,
+              "label": "Afstand tot basisonderwijs (km)",
+              "group": "Afstand tot voorzieningen"
+            },
+            {
+              "id": 44,
+              "label": "Afstand tot voortgezet onderwijs (km)",
+              "group": "Afstand tot voorzieningen"
+            },
+            {
+              "id": 45,
+              "label": "Afstand tot treinstation (km)",
+              "group": "Afstand tot voorzieningen"
+            },
+            {
+              "id": 46,
+              "label": "Afstand tot ziekenhuis (km)",
+              "group": "Afstand tot voorzieningen"
+            },
+            {
+              "id": 47,
+              "label": "Afstand tot restaurant (km)",
+              "group": "Afstand tot voorzieningen"
+            },
+            {
+              "id": 48,
+              "label": "Afstand tot oprit hoofdverkeersweg (km)",
+              "group": "Afstand tot voorzieningen"
+            },
+            {
+              "id": 49,
+              "label": "Afstand tot brandweerkazerne (km)",
+              "group": "Afstand tot voorzieningen"
+            },
+            {
+              "id": 50,
+              "label": "Grote supermarkten binnen 1 km",
+              "group": "Nabijheid voorzieningen"
+            },
+            {
+              "id": 51,
+              "label": "Dagelijkse-levensmiddelenwinkels binnen 1 km",
+              "group": "Nabijheid voorzieningen"
+            },
+            {
+              "id": 52,
+              "label": "Huisartsenpraktijken binnen 1 km",
+              "group": "Nabijheid voorzieningen"
+            },
+            {
+              "id": 53,
+              "label": "Kinderdagverblijven binnen 1 km",
+              "group": "Nabijheid voorzieningen"
+            },
+            {
+              "id": 54,
+              "label": "Basisscholen binnen 1 km",
+              "group": "Nabijheid voorzieningen"
+            },
+            {
+              "id": 55,
+              "label": "Restaurants binnen 1 km",
+              "group": "Nabijheid voorzieningen"
+            }
+          ],
+          "default": 1
+        }
+      },
+      "countCol": "count",
+      "weightCol": "weight",
+      "yearAggregation": "sum",
+      "defaultClassification": {
+        "method": "jenks",
+        "n": 5,
+        "palette": "YlOrRd"
+      }
     }
   },
   "flows": {
     "ovin": {
       "name": "Verplaatsingen 2004-2024 (OViN/ODiN)",
-      "description": "Onderzoek Verplaatsingen in Nederland (OViN/ODiN) 2004-2024. Per-trip records aggregated to herkomst-bestemming gemeenten. Tellingen = som van factorv (gewogen ritten over de gekozen periode).",
+      "description": "Onderzoek Verplaatsingen in Nederland (OViN/ODiN) 2004-2024. Per-trip records aggregated to herkomst-bestemming gemeenten. Weergegeven waarde = som van factorv (gewogen ritten over de gekozen periode); count = aantal waarnemingen (ritten in de steekproef) waarop dat berust.",
       "scales": {
         "gem": "parquet/ovin-edges-gem.parquet",
         "pc4": "parquet/ovin-edges-pc4.parquet"
@@ -805,6 +1120,7 @@
       },
       "countCol": "count",
       "weightCol": "weight",
+      "weighted": true,
       "yearAggregation": "daily",
       "defaultClassification": {
         "method": "quantile",
@@ -1202,6 +1518,13 @@
       "topojson": "geo/gemeenten.topo.json",
       "centroids": "geo/gem-centroids.json",
       "centroidsRd": "geo/gem-centroids-rd.json",
+      "idProp": "area_code"
+    },
+    "buurt": {
+      "geojson": "geo/buurt.geojson",
+      "topojson": "geo/buurt.topo.json",
+      "centroids": "geo/buurt-centroids.json",
+      "centroidsRd": "geo/buurt-centroids-rd.json",
       "idProp": "area_code"
     }
   },

@@ -17,6 +17,7 @@
 	import ScaleToggle from '$lib/ui/ScaleToggle.svelte';
 	import DatasetPicker from '$lib/ui/DatasetPicker.svelte';
 	import YearPicker from '$lib/ui/YearPicker.svelte';
+	import VariablePicker from '$lib/ui/VariablePicker.svelte';
 	import CategoryFilters from '$lib/ui/CategoryFilters.svelte';
 	import SaveLayerInput from '$lib/ui/SaveLayerInput.svelte';
 	import SaveFlowLayerInput from '$lib/ui/SaveFlowLayerInput.svelte';
@@ -46,6 +47,7 @@
 	import { flow, flowCartography } from '$lib/state/flow.svelte.js';
 	import { ui } from '$lib/state/ui.svelte.js';
 	import { geoNames } from '$lib/state/geo-names.svelte.js';
+	import { scaleLabel, scaleUnit } from '$lib/scales.js';
 
 	let { data } = $props();
 	let lassoActive = $state(false);
@@ -183,7 +185,7 @@
 		if (displayed.error) return displayed.error;
 		if (manifestState.error) return manifestState.error;
 		if (displayed.loading || manifestState.loading) return 'querying…';
-		const unit = selection.scale === 'pc4' ? 'PC4s' : 'gemeenten';
+		const unit = scaleUnit(selection.scale);
 		const active = displayed.activeLayer;
 		const prefix = active ? `${active.name}: ` : '';
 		return `${prefix}${displayed.data.size.toLocaleString()} ${unit}`;
@@ -377,6 +379,7 @@
 			<div class="stack">
 				<DatasetPicker {manifest} />
 				<YearPicker {manifest} />
+				<VariablePicker {manifest} />
 				<CategoryFilters {manifest} />
 				<div class="save-divider"></div>
 				<SaveLayerInput {manifest} />
@@ -393,8 +396,8 @@
 				<DatasetPicker {manifest} state={flow} section="flows" />
 				{#if flow.enabled && !flowScaleAvailable}
 					<p class="hint">
-						This dataset is not available at {selection.scale === 'pc4' ? 'PC4' : 'gemeente'}
-						scale. Switch the node scale to view flows.
+						This dataset is not available at {scaleLabel(selection.scale)} scale. Switch the node scale
+						to view flows.
 					</p>
 				{/if}
 				<YearPicker {manifest} state={flow} section="flows" />

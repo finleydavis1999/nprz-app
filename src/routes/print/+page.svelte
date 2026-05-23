@@ -16,6 +16,7 @@
 	import { mapLayers } from '$lib/state/map-layers.svelte.js';
 	import { geoNames } from '$lib/state/geo-names.svelte.js';
 	import { runFlows } from '$lib/data/flowQuery.js';
+	import { scaleLabel } from '$lib/scales.js';
 
 	let title = $state('');
 	let mapWrap;
@@ -121,10 +122,8 @@
 
 	const defaultTitle = $derived.by(() => {
 		const active = displayed.activeLayer;
-		if (active) return `${active.name} — ${selection.scale === 'pc4' ? 'PC4' : 'Gemeente'}`;
-		return dataset && geo
-			? `${dataset.name} — ${selection.scale === 'pc4' ? 'PC4' : 'Gemeente'} — ${yearLabel}`
-			: '';
+		if (active) return `${active.name} — ${scaleLabel(selection.scale)}`;
+		return dataset && geo ? `${dataset.name} — ${scaleLabel(selection.scale)} — ${yearLabel}` : '';
 	});
 	const effectiveTitle = $derived(title.trim() || defaultTitle);
 

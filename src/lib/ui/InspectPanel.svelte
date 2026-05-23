@@ -3,6 +3,7 @@
 	import Field from './Field.svelte';
 	import { ui } from '$lib/state/ui.svelte.js';
 	import { geoNames } from '$lib/state/geo-names.svelte.js';
+	import { scaleLabel } from '$lib/scales.js';
 
 	let {
 		nodeValueByArea = new Map(),
@@ -49,7 +50,7 @@
 	{:else if target.kind === 'node'}
 		{@const name = geoNames.get(nodeScale, target.id)}
 		<div class="row">
-			<span class="badge node">{nodeScale === 'gem' ? 'gemeente' : nodeScale}</span>
+			<span class="badge node">{scaleLabel(nodeScale).toLowerCase()}</span>
 			<span class="name">{name}</span>
 			{#if pinned}<span class="pin" title="Pinned (click empty space or press Esc to clear)"
 					>📌</span

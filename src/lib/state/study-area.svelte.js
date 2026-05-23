@@ -30,7 +30,7 @@ function writeJSON(key, value) {
 
 class StudyAreaState {
 	ids = $state(new SvelteSet());
-	scale = $state(/** @type {'pc4' | 'gem' | null} */ (null));
+	scale = $state(/** @type {'pc4' | 'gem' | 'buurt' | null} */ (null));
 	saved = $state(/** @type {Record<string, { scale: string, ids: string[] }>} */ ({}));
 	#hydrated = false;
 

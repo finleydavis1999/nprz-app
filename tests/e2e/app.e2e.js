@@ -59,7 +59,7 @@ test.describe('app', () => {
 		});
 
 		await expect(page.locator('.brand')).toContainText('NPRZ');
-		await expect(page.locator('.status').first()).toContainText(/PC4s|gemeenten/);
+		await expect(page.locator('.status').first()).toContainText(/PC4s|gemeenten|buurten/);
 
 		// Left sidebar: data inputs.
 		const leftTitles = await page.locator('.sidebar-left details.panel summary').allTextContents();
@@ -259,6 +259,21 @@ test.describe('app', () => {
 		await expect(page.locator('.status').first()).toContainText('PC4s', { timeout: 15_000 });
 	});
 
+	test('Buurt scale falls back to the CBS dataset and shows the variable picker', async ({
+		page
+	}) => {
+		await expect(page.locator('.status').first()).toContainText('gemeenten');
+		await page.locator('.seg label', { hasText: 'Buurt' }).click();
+		await expect(page.locator('.status').first()).toContainText('buurten', { timeout: 20_000 });
+		// Existing datasets are pc4+gem only — DatasetPicker falls back to the
+		// CBS dataset, which surfaces the variable picker.
+		const nodePanel = page.locator('details.panel', { hasText: 'Node data' });
+		await expect(nodePanel.locator('label.field', { hasText: 'Variabele' })).toBeVisible();
+		await expect(page.locator('.status').first()).not.toContainText('querying', {
+			timeout: 20_000
+		});
+	});
+
 	test('filter chip toggles affect status reset state', async ({ page }) => {
 		const nodeStatus = page.locator('.status').first();
 		const baselineStatus = await nodeStatus.textContent();
@@ -266,7 +281,7 @@ test.describe('app', () => {
 		await expect(page.locator('button.link', { hasText: /Reset \(/ }).first()).toBeVisible();
 		await expect(nodeStatus).not.toContainText('querying', { timeout: 10_000 });
 		await page.locator('button.link', { hasText: /Reset/ }).first().click();
-		await expect(nodeStatus).toContainText(/PC4s|gemeenten/);
+		await expect(nodeStatus).toContainText(/PC4s|gemeenten|buurten/);
 		expect(await nodeStatus.textContent()).toBe(baselineStatus);
 	});
 
