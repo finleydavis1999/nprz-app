@@ -30,7 +30,8 @@
 		"protomaps-themes-base": "^4.5.0",
 		"simple-statistics": "^7.8.9",
 		"svelteplot": "^0.14.2",
-		"topojson-client": "^3.1.0"
+		"topojson-client": "^3.1.0",
+		"webr": "^0.6.0"
 	},
 	"devDependencies": {
 		"@better-auth/cli": "~1.4.21",
