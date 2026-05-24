@@ -2,10 +2,11 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { setMapContext } from './context.js';
 	import { installLayerAnchors } from './layer-order.js';
+	import { MAP_DEFAULTS } from './defaults.js';
 
 	let {
-		center = [5.3, 52.1],
-		zoom = 7,
+		center = MAP_DEFAULTS.center,
+		zoom = MAP_DEFAULTS.zoom,
 		apiKey = null,
 		pmtilesUrl = null,
 		theme = 'white',

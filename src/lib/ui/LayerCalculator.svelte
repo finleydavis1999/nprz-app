@@ -164,6 +164,15 @@
 		layers.setActive(layers.activeId === id ? null : id);
 	}
 
+	function onRemoveAll() {
+		const n = layers.items.length;
+		if (n === 0) return;
+		const msg = `Delete all ${n} saved layer${n === 1 ? '' : 's'}? This cannot be undone.`;
+		if (!confirm(msg)) return;
+		layers.clearAll();
+		expandedId = null;
+	}
+
 	// The expression editor is a contenteditable div so saved-layer slugs can
 	// render as inline chip elements (atomic, contenteditable=false). Other
 	// content (operators, numbers, parens, whitespace) is plain text. The
@@ -499,6 +508,16 @@
 				</li>
 			{/each}
 		</ul>
+		<div class="bulk-row">
+			<button
+				type="button"
+				class="bulk-del"
+				onclick={onRemoveAll}
+				title="Delete every saved layer (confirms first)"
+			>
+				Remove all saved layers
+			</button>
+		</div>
 	{/if}
 
 	<form class="calc" onsubmit={onSaveCalc}>
@@ -808,6 +827,24 @@
 		padding: 0 2px;
 	}
 	.del:hover {
+		color: var(--color-text);
+	}
+	.bulk-row {
+		display: flex;
+		justify-content: flex-end;
+		margin-top: var(--spacing-1);
+	}
+	.bulk-del {
+		background: transparent;
+		border: 1px solid var(--color-line);
+		border-radius: var(--radius);
+		padding: 2px var(--spacing-2);
+		font-size: var(--text-xs);
+		color: var(--color-muted);
+		cursor: pointer;
+	}
+	.bulk-del:hover {
+		border-color: var(--color-muted);
 		color: var(--color-text);
 	}
 	.details {

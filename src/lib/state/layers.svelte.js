@@ -252,6 +252,15 @@ class LayersState {
 		this.recomputeCalcs();
 	}
 
+	clearAll() {
+		this.items = [];
+		this.results.clear();
+		this.loading.clear();
+		this.errors.clear();
+		this.activeId = null;
+		this.persist();
+	}
+
 	setActive(id) {
 		this.activeId = id;
 		this.persist();

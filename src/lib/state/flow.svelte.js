@@ -8,22 +8,49 @@
 //
 // Reactivity rule: when mutating `filters`, assign a new object
 // (`flow.filters = { ...flow.filters, [k]: v }`) — deep mutation isn't tracked.
+//
+// Defaults for both classes live in their respective frozen `DEFAULTS` consts
+// at the top of the file; field initializers and `reset()` both consume them.
+import { applyDefaults } from './defaults.js';
+
 const STORAGE_KEY = 'nprz.flow.v1';
 
-class FlowState {
-	enabled = $state(false);
-	dataset = $state('ovin');
-	scale = $state('gem');
+const DEFAULTS = Object.freeze({
+	enabled: false,
+	dataset: 'ovin',
+	scale: 'gem',
 	// Inclusive year range. yearMin === yearMax = single year.
-	yearMin = $state(2018);
-	yearMax = $state(2018);
-	filters = $state({});
+	yearMin: 2018,
+	yearMax: 2018,
+	filters: /** @type {Record<string, number[]>} */ ({}),
 	// Client-side filters: only render flows whose post-aggregation value is
 	// >= minWeight and (on weighted layers) whose observation count is
 	// >= minCount. Updates do not re-query DuckDB.
-	minWeight = $state(0);
-	minCount = $state(0);
-	includeSelfLoops = $state(false);
+	minWeight: 0,
+	minCount: 0,
+	includeSelfLoops: false
+});
+
+const CARTO_DEFAULTS = Object.freeze({
+	method: 'quantile',
+	n: 5,
+	palette: 'YlOrRd',
+	widthMin: 0.5,
+	widthMax: 8,
+	opacity: 0.75,
+	curvature: 0.2
+});
+
+class FlowState {
+	enabled = $state(DEFAULTS.enabled);
+	dataset = $state(DEFAULTS.dataset);
+	scale = $state(DEFAULTS.scale);
+	yearMin = $state(DEFAULTS.yearMin);
+	yearMax = $state(DEFAULTS.yearMax);
+	filters = $state(structuredClone(DEFAULTS.filters));
+	minWeight = $state(DEFAULTS.minWeight);
+	minCount = $state(DEFAULTS.minCount);
+	includeSelfLoops = $state(DEFAULTS.includeSelfLoops);
 
 	load() {
 		if (typeof localStorage === 'undefined') return;
@@ -66,16 +93,25 @@ class FlowState {
 			// quota / private mode — non-fatal
 		}
 	}
+
+	reset() {
+		applyDefaults(this, DEFAULTS);
+		this.persist();
+	}
 }
 
 class FlowCartographyState {
-	method = $state('quantile');
-	n = $state(5);
-	palette = $state('YlOrRd');
-	widthMin = $state(0.5);
-	widthMax = $state(8);
-	opacity = $state(0.75);
-	curvature = $state(0.2);
+	method = $state(CARTO_DEFAULTS.method);
+	n = $state(CARTO_DEFAULTS.n);
+	palette = $state(CARTO_DEFAULTS.palette);
+	widthMin = $state(CARTO_DEFAULTS.widthMin);
+	widthMax = $state(CARTO_DEFAULTS.widthMax);
+	opacity = $state(CARTO_DEFAULTS.opacity);
+	curvature = $state(CARTO_DEFAULTS.curvature);
+
+	reset() {
+		applyDefaults(this, CARTO_DEFAULTS);
+	}
 }
 
 export const flow = new FlowState();

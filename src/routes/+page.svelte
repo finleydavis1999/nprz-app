@@ -3,6 +3,7 @@
 	import { PUBLIC_PROTOMAPS_API_KEY } from '$env/static/public';
 	import { dataUrl } from '$lib/data/url.js';
 	import MapView from '$lib/map/Map.svelte';
+	import { MAP_DEFAULTS } from '$lib/map/defaults.js';
 	import ChoroplethLayer from '$lib/map/ChoroplethLayer.svelte';
 	import BoundaryLayer from '$lib/map/BoundaryLayer.svelte';
 	import BuiltUpLayer from '$lib/map/BuiltUpLayer.svelte';
@@ -43,7 +44,7 @@
 	import { manifestState } from '$lib/state/manifest.svelte.js';
 	import { queryResult } from '$lib/state/query-result.svelte.js';
 	import { studyArea } from '$lib/state/study-area.svelte.js';
-	import { displayed } from '$lib/state/layers.svelte.js';
+	import { displayed, layers } from '$lib/state/layers.svelte.js';
 	import { flow, flowCartography } from '$lib/state/flow.svelte.js';
 	import { ui } from '$lib/state/ui.svelte.js';
 	import { geoNames } from '$lib/state/geo-names.svelte.js';
@@ -112,6 +113,26 @@
 		studyArea.init();
 		schedulePrefetch();
 	});
+
+	// Hard reset: snap every state singleton back to its declared defaults and
+	// recenter the map. Saved layers are left intact — the calculator dock has
+	// its own delete-all affordance — but the active selection is dropped.
+	function resetAll() {
+		selection.reset();
+		flow.reset();
+		cartography.reset();
+		flowCartography.reset();
+		mapLayers.reset();
+		studyArea.clear();
+		layers.setActive(null);
+		ui.selected = null;
+		ui.hovered = null;
+		ui.selectedFlowNode = null;
+		ui.flowMode = 'unified';
+		ui.showLabels = false;
+		const map = /** @type {any} */ (globalThis).__map;
+		map?.jumpTo?.(MAP_DEFAULTS);
+	}
 
 	$effect(() => {
 		studyArea.bindToScale(selection.scale);
@@ -264,25 +285,32 @@
 </script>
 
 <div style="position: fixed; inset: 0;">
-	<MapView center={[5.3, 52.1]} zoom={7} apiKey={PUBLIC_PROTOMAPS_API_KEY} theme="white">
+	<MapView
+		center={MAP_DEFAULTS.center}
+		zoom={MAP_DEFAULTS.zoom}
+		apiKey={PUBLIC_PROTOMAPS_API_KEY}
+		theme="white"
+	>
 		{#if manifest && geoMain}
-			{#key selection.scale}
-				<ChoroplethLayer
-					sourceId="choropleth-{selection.scale}"
-					geoUrl={dataUrl(geoMain.geojson, manifest.version)}
-					promoteId={geoMain.idProp}
-					valueByArea={displayed.data}
-					selectedIds={studyArea.ids}
-					{fillColor}
-					fillOpacity={cartography.fillOpacity}
-					lineColor={cartography.lineColor}
-					lineWidth={cartography.lineWidth}
-				/>
-				<LassoTool active={lassoActive} fillLayerId="choropleth-{selection.scale}-fill" />
-				{#if ui.showLabels}
-					<NodeNamesLayer sourceId="choropleth-{selection.scale}" />
-				{/if}
-			{/key}
+			{#if selection.enabled}
+				{#key selection.scale}
+					<ChoroplethLayer
+						sourceId="choropleth-{selection.scale}"
+						geoUrl={dataUrl(geoMain.geojson, manifest.version)}
+						promoteId={geoMain.idProp}
+						valueByArea={displayed.data}
+						selectedIds={studyArea.ids}
+						{fillColor}
+						fillOpacity={cartography.fillOpacity}
+						lineColor={cartography.lineColor}
+						lineWidth={cartography.lineWidth}
+					/>
+					<LassoTool active={lassoActive} fillLayerId="choropleth-{selection.scale}-fill" />
+					{#if ui.showLabels}
+						<NodeNamesLayer sourceId="choropleth-{selection.scale}" />
+					{/if}
+				{/key}
+			{/if}
 			{#if geoOverlay}
 				{#key mapLayers.boundaryScale}
 					<BoundaryLayer
@@ -351,6 +379,14 @@
 		<div class="brand-row">
 			<div class="brand">NPRZ <span class="brand-sub">analytics</span></div>
 			<div class="actions">
+				<button
+					type="button"
+					class="action"
+					onclick={resetAll}
+					title="Reset view and all controls to defaults (saved layers are kept)"
+				>
+					⟲
+				</button>
 				{#if data.user}
 					<form method="POST" action="?/logout" class="logout-form">
 						<button type="submit" class="action" title="Sign out — {data.user.email}">↪</button>
@@ -377,6 +413,7 @@
 	<Panel title="Node data">
 		{#if manifest}
 			<div class="stack">
+				<Toggle bind:checked={selection.enabled} label="Show nodes" />
 				<DatasetPicker {manifest} />
 				<YearPicker {manifest} />
 				<VariablePicker {manifest} />
