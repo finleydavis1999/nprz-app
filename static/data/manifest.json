@@ -1,5 +1,5 @@
 {
-  "version": "2026-05-23T20:39:17Z",
+  "version": "2026-05-24T14:21:00Z",
   "datasets": {
     "demographics": {
       "name": "Persoonsgegevens 2018",
@@ -632,7 +632,7 @@
     },
     "cbs-vk100": {
       "name": "CBS Vierkant 100m 2023",
-      "description": "CBS 100m-grid 2023, geaggregeerd per gebied via cel-centro<c3><af>de-in-polygoon. Aantallen worden gesommeerd; percentages, gemiddelden en afstanden zijn inwoner- of woninggewogen gemiddelden. Cellen <5 inwoners zijn door CBS onderdrukt.",
+      "description": "CBS 100m-grid 2023, geaggregeerd per gebied via cel-centroïde-in-polygoon. Aantallen worden gesommeerd; percentages, gemiddelden en afstanden zijn inwoner- of woninggewogen gemiddelden. Cellen <5 inwoners zijn door CBS onderdrukt.",
       "warning": "Data in this set has been aggregated up from the '100m vierkant' scale. Absolute counts are summed, other variables are using a population-weighted average. Keep that in mind when interpreting the data.",
       "scales": {
         "buurt": "parquet/cbs-vk100-buurt.parquet",
@@ -1130,7 +1130,7 @@
     },
     "woonwerk": {
       "name": "Woon-Werk 1999-2017",
-      "description": "CBS microdata, home <e2><86><92> work commute flows aggregated to herkomst-bestemming. Cells <10 suppressed for privacy.",
+      "description": "CBS microdata, home → work commute flows aggregated to herkomst-bestemming. Cells <10 suppressed for privacy.",
       "scales": {
         "gem": "parquet/woonwerk-edges-gem.parquet",
         "pc4": "parquet/woonwerk-edges-pc4.parquet"
@@ -1246,7 +1246,7 @@
     },
     "werkwerk": {
       "name": "Baanverhuizingen 1999-2017",
-      "description": "CBS microdata, job <e2><86><92> job moves between successive observed employments. Cells <10 suppressed for privacy.",
+      "description": "CBS microdata, job → job moves between successive observed employments. Cells <10 suppressed for privacy.",
       "scales": {
         "gem": "parquet/werkwerk-edges-gem.parquet",
         "pc4": "parquet/werkwerk-edges-pc4.parquet"
