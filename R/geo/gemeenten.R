@@ -14,6 +14,12 @@ build_gemeenten <- function() {
   src <- "raw-data/geo-data/cbsgebiedsindelingen2025.gpkg"
   gem <- sf::read_sf(src, layer = "gemeente_gegeneraliseerd") |>
     dplyr::transmute(area_code = statcode, name = statnaam)
+  gem <- sf::read_sf(src, layer = "gemeente_gegeneraliseerd") |>
+    dplyr::transmute(area_code = statcode, name = statnaam) |>
+    dplyr::filter(!area_code %in% c(
+    "GM0050", "GM0279", "GM0353", "GM0502", "GM0542",
+    "GM0589", "GM0627", "GM0852", "GM1509", "GM1896", "GM1992"
+  ))
 
   simplify_to_geojson_and_topojson(
     gem,

@@ -128,6 +128,8 @@
 				flowError = `centroids: ${e.message}`;
 			});
 	});
+	// option to not display nodal data at all, for users who just want to see flows on a basemap (and avoid confusion when the node data doesn't match the flow data because of missing categories or whatever)
+	let showChoropleth = $state(true);
 
 	// Re-run flow query whenever flow selection changes (only while enabled).
 	// Note: flow.minWeight is a client-side filter (see filteredFlows below).
@@ -244,17 +246,19 @@
 	<MapView center={[5.3, 52.1]} zoom={7} apiKey={PUBLIC_PROTOMAPS_API_KEY} theme="white">
 		{#if manifest && geoMain}
 			{#key selection.scale}
-				<ChoroplethLayer
-					sourceId="choropleth-{selection.scale}"
-					geoUrl={dataUrl(geoMain.geojson, manifest.version)}
-					promoteId={geoMain.idProp}
-					valueByArea={displayed.data}
-					selectedIds={studyArea.ids}
-					{fillColor}
-					fillOpacity={cartography.fillOpacity}
-					lineColor={cartography.lineColor}
-					lineWidth={cartography.lineWidth}
-				/>
+				{#if showChoropleth}
+					<ChoroplethLayer
+						sourceId="choropleth-{selection.scale}"
+						geoUrl={dataUrl(geoMain.geojson, manifest.version)}
+						promoteId={geoMain.idProp}
+						valueByArea={displayed.data}
+						selectedIds={studyArea.ids}
+						{fillColor}
+						fillOpacity={cartography.fillOpacity}
+						lineColor={cartography.lineColor}
+						lineWidth={cartography.lineWidth}
+					/>
+				{/if}
 				<LassoTool active={lassoActive} fillLayerId="choropleth-{selection.scale}-fill" />
 				{#if ui.showLabels}
 					<NodeNamesLayer sourceId="choropleth-{selection.scale}" />
@@ -341,6 +345,9 @@
 				<YearPicker {manifest} />
 				<VariablePicker {manifest} />
 				<CategoryFilters {manifest} />
+				<Field label="Show areas">
+					<input type="checkbox" bind:checked={showChoropleth} />
+				</Field>
 				<div class="save-divider"></div>
 				<SaveLayerInput {manifest} />
 			</div>
@@ -365,15 +372,33 @@
 				<YearPicker {manifest} state={flow} section="flows" />
 				<VariablePicker {manifest} state={flow} section="flows" />
 				<CategoryFilters {manifest} state={flow} section="flows" />
-				<Field label="Min weight" value={flow.minWeight.toFixed(flowMaxValue < 100 ? 1 : 0)}>
-					<input
-						type="range"
-						min="0"
-						max={flowMaxValue || 1}
-						step={flowSliderStep}
-						bind:value={flow.minWeight}
-						disabled={!flowResult || flowMaxValue === 0}
-					/>
+				<Field label="Min weight">
+					<div style="display:flex; gap:var(--spacing-2); align-items:center;">
+						<input
+							type="range"
+							min="0"
+							max={flowMaxValue || 1}
+							step={flowSliderStep}
+							value={flow.minWeight}
+							readonly
+							style="flex:1; pointer-events:none; opacity:0.6"
+						/>
+						<input
+							type="number"
+							min="0"
+							max={flowMaxValue || 1}
+							step={flowSliderStep}
+							value={flow.minWeight}
+							disabled={!flowResult || flowMaxValue === 0}
+							style="width:60px"
+							onchange={(e) => {
+								flow.minWeight = Number(e.currentTarget.value);
+							}}
+							onkeydown={(e) => {
+								if (e.key === 'Enter') e.currentTarget.blur();
+							}}
+						/>
+					</div>
 				</Field>
 				<Field label="Self-loops">
 					<input type="checkbox" bind:checked={flow.includeSelfLoops} />

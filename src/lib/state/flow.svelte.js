@@ -29,7 +29,6 @@ class FlowState {
 			const raw = localStorage.getItem(STORAGE_KEY);
 			if (!raw) return;
 			const p = JSON.parse(raw);
-			if (typeof p?.enabled === 'boolean') this.enabled = p.enabled;
 			if (typeof p?.dataset === 'string') this.dataset = p.dataset;
 			if (typeof p?.scale === 'string') this.scale = p.scale;
 			if (Number.isFinite(p?.yearMin)) this.yearMin = p.yearMin;
