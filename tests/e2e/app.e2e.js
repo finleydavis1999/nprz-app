@@ -65,11 +65,16 @@ test.describe('app', () => {
 		const leftTitles = await page.locator('.sidebar-left details.panel summary').allTextContents();
 		expect(leftTitles).toEqual(['Scale', 'Node data', 'Flow data', 'Map layers']);
 
-		// Right sidebar: inspect + cartography.
+		// Right sidebar: inspect + model results + cartography.
 		const rightTitles = await page
 			.locator('.sidebar-right details.panel summary')
 			.allTextContents();
-		expect(rightTitles).toEqual(['Inspect', 'Node cartography', 'Flow cartography']);
+		expect(rightTitles).toEqual([
+			'Inspect',
+			'Model results',
+			'Node cartography',
+			'Flow cartography'
+		]);
 
 		// Dock toggle strip exposes Layer Calculator, Study area, and Print.
 		await expect(page.locator('.strip')).toBeVisible();
@@ -100,18 +105,19 @@ test.describe('app', () => {
 		await expect(saveBtn).toBeEnabled();
 		await saveBtn.click();
 
-		// Both saves land as separate layers; the second gets a sequential suffix.
-		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
-		const dock = page.locator('.dock', { hasText: 'Layer Calculator' });
-		const names = dock.locator('ul.layers .layer:not(.live) .name');
+		// Both saves land in the Node data panel's "Saved node layers" section;
+		// the second gets a sequential suffix.
+		const savedList = page
+			.locator('.sidebar-left .saved-layers-section')
+			.filter({ hasText: 'Saved node layers' });
+		const names = savedList.locator('ul.layers .layer:not(.live) .name');
 		await expect(names).toHaveCount(2);
 		const first = (await names.nth(0).textContent())?.trim();
 		expect((await names.nth(1).textContent())?.trim()).toBe(`${first} 2`);
 
-		// Clean up persisted layers + dock state for sibling tests.
-		const del = dock.locator('ul.layers .layer:not(.live) .del');
+		// Clean up persisted layers for sibling tests.
+		const del = savedList.locator('ul.layers .layer:not(.live) .del');
 		while (await del.count()) await del.first().click();
-		await dock.locator('.dock-close').click();
 	});
 
 	test('clicking a node populates the inspect panel', async ({ page }) => {
@@ -293,11 +299,14 @@ test.describe('app', () => {
 		const cartoPanel = page.locator('details.panel').filter({
 			has: page.locator('summary', { hasText: /^Node cartography$/ })
 		});
-		const before = await cartoPanel.locator('.legend .label').allTextContents();
+		// Legend moved out of the cartography panel into the MapLegend overlay;
+		// read break labels from there instead.
+		const mapLegend = page.locator('.map-legend .legend').first();
+		const before = await mapLegend.locator('.label').allTextContents();
 		const methodSelect = cartoPanel.locator('label.field', { hasText: 'Method' }).locator('select');
 		await methodSelect.selectOption({ label: 'Quantile' });
 		await page.waitForTimeout(400);
-		const after = await cartoPanel.locator('.legend .label').allTextContents();
+		const after = await mapLegend.locator('.label').allTextContents();
 		expect(after).not.toEqual(before);
 		expect(after.length).toBe(before.length);
 		// Reset to default so sibling tests assert against unchanged breaks.
@@ -307,12 +316,14 @@ test.describe('app', () => {
 	test('print route renders SVG with one path per feature, shares classification', async ({
 		page
 	}) => {
-		// Capture screen-side node-legend breaks first. Scope to the node
-		// cartography panel so the flow legend (when present) doesn't pollute.
-		const nodeCartoLegend = page
-			.locator('details.panel', { has: page.locator('summary', { hasText: /^Node cartography$/ }) })
-			.locator('.legend');
-		const screenBreaks = await nodeCartoLegend.locator('.label').allTextContents();
+		// Capture screen-side node-legend breaks first. Reads from the
+		// MapLegend overlay (where the legend now lives, not the cartography
+		// panel) — first slot is the node legend.
+		const screenBreaks = await page
+			.locator('.map-legend .legend')
+			.first()
+			.locator('.label')
+			.allTextContents();
 		await page.click('a.tool.print');
 		await page.waitForURL('/print');
 		await expect(page.locator('.sheet svg')).toBeVisible({ timeout: 15_000 });
@@ -338,25 +349,31 @@ test.describe('app', () => {
 		await saveRow.locator('input[type="text"]').fill('e2eBase');
 		await saveRow.getByRole('button', { name: 'Save layer', exact: true }).click();
 
-		// Open the layer calculator dock.
-		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
-		const dock = page.locator('.dock', { hasText: 'Layer Calculator' });
-		await expect(dock).toBeVisible();
-
-		// The saved node filter layer (◆) resolves to a numeric feature count.
-		const baseRow = dock.locator('.layer').filter({
+		// The Saved-layers list now lives in the Node data sidebar panel (it
+		// moved out of the Layer Calculator dock when the dock became a pure
+		// editor). The base filter layer (◆) resolves to a numeric count there.
+		const savedList = page
+			.locator('.sidebar-left .saved-layers-section')
+			.filter({ hasText: 'Saved node layers' });
+		const baseRow = savedList.locator('.layer').filter({
 			has: page.locator('.kind', { hasText: '◆' })
 		});
 		await expect(baseRow.locator('.meta')).toHaveText(/^\d+$/, { timeout: 15_000 });
+
+		// Open the layer calculator dock to use the smoothed-layer form.
+		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
+		const dock = page.locator('.dock', { hasText: 'Layer Calculator' });
+		await expect(dock).toBeVisible();
 
 		// The "Add smoothed layer" form auto-fills a default name and auto-picks
 		// the node layer as input, so it submits immediately without typing.
 		const smoothForm = dock.locator('form.calc', { hasText: 'Add smoothed layer' });
 		await smoothForm.getByRole('button', { name: 'Add smoothed layer' }).click();
 
-		// A smooth-kind row (◈) appears with a numeric count — the spatial-lag
-		// Worker fetched RD centroids and produced a value per node.
-		const smoothRow = dock.locator('.layer').filter({
+		// The new smooth-kind row (◈) appears in the sidebar with a numeric
+		// count — the spatial-lag Worker fetched RD centroids and produced
+		// a value per node.
+		const smoothRow = savedList.locator('.layer').filter({
 			has: page.locator('.kind', { hasText: '◈' })
 		});
 		await expect(smoothRow.locator('.meta')).toHaveText(/^\d+$/, { timeout: 15_000 });
@@ -364,7 +381,7 @@ test.describe('app', () => {
 		// Clean up so sibling tests see an empty layer list.
 		await smoothRow.locator('.del').click();
 		await baseRow.locator('.del').click();
-		await expect(dock.locator('.layer', { hasText: 'e2e' })).toHaveCount(0);
+		await expect(savedList.locator('.layer:not(.live)')).toHaveCount(0);
 		await dock.locator('.dock-close').click();
 	});
 
@@ -373,13 +390,13 @@ test.describe('app', () => {
 	}) => {
 		// Reach a state with two saved node-domain filter layers — the minimum
 		// the add-model form requires (one dependent + one covariate).
-		const calc = page.locator('.dock', { hasText: 'Layer Calculator' });
 		const saveBtn = page.locator('.sidebar-left .save-row button', { hasText: 'Save layer' });
 		await saveBtn.click();
 		await saveBtn.click();
-		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
-		await expect(calc.locator('.layer:not(.live)')).toHaveCount(2);
-		await calc.locator('.dock-close').click();
+		const savedList = page
+			.locator('.sidebar-left .saved-layers-section')
+			.filter({ hasText: 'Saved node layers' });
+		await expect(savedList.locator('.layer:not(.live)')).toHaveCount(2);
 
 		// Open the Model dock and verify the add-model form is present.
 		const dock = page.locator('.dock', { hasText: 'Model Calculator' });
@@ -401,13 +418,11 @@ test.describe('app', () => {
 
 		// Clean up.
 		await dock.locator('.dock-close').click();
-		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
-		const layerRows = calc.locator('.layer:not(.live)');
+		const layerRows = savedList.locator('.layer:not(.live)');
 		// Delete each via the × button — count goes down on each removal.
 		while ((await layerRows.count()) > 0) {
 			await layerRows.first().locator('.del').click();
 		}
-		await calc.locator('.dock-close').click();
 	});
 
 	// Gated end-to-end webR fit test. Skipped by default because it pays the
@@ -424,13 +439,13 @@ test.describe('app', () => {
 		test.setTimeout(120_000);
 
 		// Reach the same two-saved-layer baseline the previous test used.
-		const calc = page.locator('.dock', { hasText: 'Layer Calculator' });
 		const saveBtn = page.locator('.sidebar-left .save-row button', { hasText: 'Save layer' });
 		await saveBtn.click();
 		await saveBtn.click();
-		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
-		await expect(calc.locator('.layer:not(.live)')).toHaveCount(2);
-		await calc.locator('.dock-close').click();
+		const savedList = page
+			.locator('.sidebar-left .saved-layers-section')
+			.filter({ hasText: 'Saved node layers' });
+		await expect(savedList.locator('.layer:not(.live)')).toHaveCount(2);
 
 		// Open the Model dock and submit the auto-populated form.
 		await page.locator('.strip .tool', { hasText: 'Model Calculator' }).click();
@@ -458,11 +473,9 @@ test.describe('app', () => {
 		await page.locator('.strip .tool', { hasText: 'Model Calculator' }).click();
 		await dock.locator('.layer.parent .del').first().click();
 		await dock.locator('.dock-close').click();
-		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
-		const layerRows = calc.locator('.layer:not(.live)');
+		const layerRows = savedList.locator('.layer:not(.live)');
 		while ((await layerRows.count()) > 0) {
 			await layerRows.first().locator('.del').click();
 		}
-		await calc.locator('.dock-close').click();
 	});
 });

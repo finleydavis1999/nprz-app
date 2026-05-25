@@ -9,6 +9,12 @@ const config = {
 	kit: {
 		adapter: adapter({ fallback: 'index.html' }),
 		paths: { base: process.env.BASE_PATH ?? '' },
+		// Auto-registration runs in dev too, where the SW does nothing useful
+		// (no immutable build assets to cache) but its fetch handler interferes
+		// with concurrent OPFS streaming under cross-origin isolation — Playwright
+		// + headless Chromium hangs OPFS writes for the parquet pipeline. We
+		// register manually in `+layout.svelte` for production only.
+		serviceWorker: { register: false },
 		typescript: {
 			config: (config) => ({
 				...config,

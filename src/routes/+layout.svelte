@@ -1,5 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
+	import { dev } from '$app/environment';
+	import { base } from '$app/paths';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { manifestState } from '$lib/state/manifest.svelte.js';
@@ -24,6 +26,13 @@
 		printView.load();
 		mapView.load();
 		hydrated = true;
+
+		// Register the service worker in production only. In dev the SW
+		// has no immutable build assets to cache, and its fetch handler
+		// blocks concurrent OPFS streaming under headless Chromium (e2e).
+		if (!dev && 'serviceWorker' in navigator) {
+			navigator.serviceWorker.register(`${base}/service-worker.js`).catch(() => {});
+		}
 	});
 
 	// Kick off the manifest fetch once on mount.
