@@ -35,6 +35,8 @@ const CARTO_DEFAULTS = Object.freeze({
 	method: 'quantile',
 	n: 5,
 	palette: 'YlOrRd',
+	divergingPalette: 'RdBu',
+	forceSequential: false,
 	widthMin: 0.5,
 	widthMax: 8,
 	opacity: 0.75,
@@ -104,6 +106,13 @@ class FlowCartographyState {
 	method = $state(CARTO_DEFAULTS.method);
 	n = $state(CARTO_DEFAULTS.n);
 	palette = $state(CARTO_DEFAULTS.palette);
+	/** Diverging palette used when the active flow values span both signs
+	 *  (e.g. SIM residuals). Same auto-detect machinery as node cartography
+	 *  — see `+page.svelte`'s `flowHasBothSigns` derive. */
+	divergingPalette = $state(CARTO_DEFAULTS.divergingPalette);
+	/** Force sequential classification + palette even when both signs are
+	 *  present. Off by default. */
+	forceSequential = $state(CARTO_DEFAULTS.forceSequential);
 	widthMin = $state(CARTO_DEFAULTS.widthMin);
 	widthMax = $state(CARTO_DEFAULTS.widthMax);
 	opacity = $state(CARTO_DEFAULTS.opacity);

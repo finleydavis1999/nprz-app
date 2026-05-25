@@ -8,16 +8,17 @@
 const STORAGE_KEY = 'nprz.ui.v1';
 
 /** @typedef {{ x: number, y: number }} DockPos */
-/** @typedef {'calculator' | 'studyArea'} DockId */
+/** @typedef {'calculator' | 'studyArea' | 'model'} DockId */
 
 const DEFAULT_POSITIONS = {
 	calculator: { x: 360, y: 24 },
-	studyArea: { x: 360, y: 360 }
+	studyArea: { x: 360, y: 360 },
+	model: { x: 720, y: 24 }
 };
 
 class UIState {
 	/** @type {Record<DockId, boolean>} */
-	openDocks = $state({ calculator: false, studyArea: false });
+	openDocks = $state({ calculator: false, studyArea: false, model: false });
 
 	/** @type {Record<DockId, DockPos>} */
 	dockPositions = $state({ ...DEFAULT_POSITIONS });

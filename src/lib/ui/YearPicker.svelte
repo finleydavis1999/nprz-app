@@ -6,6 +6,13 @@
 
 	const yearField = $derived(manifest?.[section]?.[state.dataset]?.fields?.year);
 	const isRange = $derived(yearField?.type === 'range');
+	// A 'multi'-type year is a categorical period filter (woon-werk has 3
+	// discrete periods); CategoryFilters already renders it as a multi-select.
+	// Don't double-render it here as a single-year dropdown — that's where
+	// the duplicate "Year" + "Period" UI was coming from. Only render this
+	// picker for 'range' (composite slider) and 'single' (single-year
+	// dropdown). When the field is absent entirely we also render nothing.
+	const supported = $derived(yearField?.type === 'range' || yearField?.type === 'single');
 
 	// --- single-year mode (dropdown) ---
 	const yearOptions = $derived(yearField?.values ?? []);
@@ -44,7 +51,9 @@
 	});
 </script>
 
-{#if isRange}
+{#if !supported}
+	<!-- intentionally empty; CategoryFilters handles 'multi'-type year fields -->
+{:else if isRange}
 	<Field label={yearField.label ?? 'Periode'} value="{lo}–{hi}">
 		<div class="rangeslider">
 			<div class="track"></div>

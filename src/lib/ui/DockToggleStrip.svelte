@@ -5,7 +5,8 @@
 
 	const docks = /** @type {const} */ ([
 		{ id: 'calculator', label: 'Layer Calculator', glyph: 'ƒx', title: 'Layer Calculator' },
-		{ id: 'studyArea', label: 'Study area', glyph: '⌒', title: 'Study area & lasso' }
+		{ id: 'studyArea', label: 'Study area', glyph: '⌒', title: 'Study area & lasso' },
+		{ id: 'model', label: 'Model Calculator', glyph: 'β', title: 'Spatial models (NLM/SIM/GWR)' }
 	]);
 
 	function toggleFrame() {

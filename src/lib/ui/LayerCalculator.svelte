@@ -1,17 +1,15 @@
 <script>
 	import Field from './Field.svelte';
 	import KernelCurve from './KernelCurve.svelte';
+	import LayerPicker from './LayerPicker.svelte';
 	import { selection } from '$lib/state/selection.svelte.js';
 	import { layers } from '$lib/state/layers.svelte.js';
 	import { slugify } from '$lib/data/layer-calc.js';
-
-	let { manifest } = $props();
 
 	let calcName = $state('');
 	let calcNameTouched = $state(false);
 	let calcExpr = $state('');
 	let calcError = $state(/** @type {string | null} */ (null));
-	let expandedId = $state(/** @type {string | null} */ (null));
 	let exprEditor = $state(/** @type {HTMLDivElement | null} */ (null));
 	let dragSlug = $state(/** @type {string | null} */ (null));
 	/** @type {'node' | 'flow'} */
@@ -135,43 +133,13 @@
 		}
 	}
 
-	// Editing a saved smooth layer's kernel — same decay-reset rule as the form.
-	function onSmoothKernel(layer, kernel) {
-		const crossesPower = (layer.kernel === 'power') !== (kernel === 'power');
-		const patch = crossesPower ? { kernel, decay: kernel === 'power' ? 2 : 1 } : { kernel };
-		layers.updateSmoothParams(layer.id, patch);
-	}
+	// Layer-list helpers (toggleExpanded/setActive/onSmoothKernel/fieldLabel/
+	// valueLabel/datasetLabel) and the `manifest` prop moved to SavedLayers
+	// when the saved-layer list left the calculator — the chip palette below
+	// reads directly from `layers.items` and doesn't need manifest lookups.
 
-	function fieldLabel(fieldId) {
-		return manifest?.datasets?.[selection.dataset]?.fields?.[fieldId]?.label ?? fieldId;
-	}
-
-	function valueLabel(layer, fieldId, valueId) {
-		const ds = manifest?.datasets?.[layer.dataset];
-		const values = ds?.fields?.[fieldId]?.values;
-		return values?.find((v) => v.id === valueId)?.label ?? String(valueId);
-	}
-
-	function datasetLabel(layer) {
-		return manifest?.datasets?.[layer.dataset]?.name ?? layer.dataset;
-	}
-
-	function toggleExpanded(id) {
-		expandedId = expandedId === id ? null : id;
-	}
-
-	function setActive(id) {
-		layers.setActive(layers.activeId === id ? null : id);
-	}
-
-	function onRemoveAll() {
-		const n = layers.items.length;
-		if (n === 0) return;
-		const msg = `Delete all ${n} saved layer${n === 1 ? '' : 's'}? This cannot be undone.`;
-		if (!confirm(msg)) return;
-		layers.clearAll();
-		expandedId = null;
-	}
+	// The "Remove all saved layers" bulk-delete moved to SavedLayers along
+	// with the layer list. The calculator dock is purely an editor now.
 
 	// The expression editor is a contenteditable div so saved-layer slugs can
 	// render as inline chip elements (atomic, contenteditable=false). Other
@@ -309,217 +277,6 @@
 </script>
 
 <div class="stack">
-	{#if layers.items.length === 0}
-		<p class="hint">No saved layers yet — save one from the Data panel to start calculating.</p>
-	{:else}
-		<ul class="layers">
-			<li class="layer live" class:active={layers.activeId === null}>
-				<button
-					type="button"
-					class="radio"
-					aria-pressed={layers.activeId === null}
-					onclick={() => layers.setActive(null)}
-					title="Show live selection"
-				>
-					{layers.activeId === null ? '●' : '○'}
-				</button>
-				<span class="kind" title="Live selection">·</span>
-				<span class="name muted">live selection</span>
-			</li>
-			{#each layers.items as layer (layer.id)}
-				{@const isOff = layer.scale !== selection.scale}
-				{@const isActive = layers.activeId === layer.id}
-				<li class="layer" class:active={isActive} class:off={isOff}>
-					<button
-						type="button"
-						class="radio"
-						aria-pressed={isActive}
-						disabled={isOff}
-						onclick={() => setActive(layer.id)}
-						title={isOff ? `Different scale (${layer.scale})` : 'Set active'}
-					>
-						{isActive ? '●' : '○'}
-					</button>
-					<span class="kind" title="{layer.domain ?? 'node'} {layer.kind}"
-						>{layer.kind === 'smooth'
-							? '◈'
-							: layer.kind === 'calc'
-								? 'ƒ'
-								: layer.domain === 'flow'
-									? '~'
-									: '◆'}</span
-					>
-					<button
-						type="button"
-						class="name-btn"
-						onclick={() => toggleExpanded(layer.id)}
-						title="Show parameters"
-					>
-						<span class="name">{layer.name}</span>
-						{#if layer.slug !== layer.name}
-							<span class="slug">({layer.slug})</span>
-						{/if}
-					</button>
-					{#if layers.loading.has(layer.id)}
-						<span class="meta">…</span>
-					{:else if layers.errors.get(layer.id)}
-						<span class="meta err" title={layers.errors.get(layer.id)}>!</span>
-					{:else if layers.results.get(layer.id)}
-						<span class="meta">{layers.results.get(layer.id).size}</span>
-					{/if}
-					<button
-						type="button"
-						class="del"
-						onclick={() => layers.remove(layer.id)}
-						title="Delete layer"
-					>
-						×
-					</button>
-					{#if expandedId === layer.id}
-						<div class="details">
-							{#if layer.kind === 'filter'}
-								<div class="line">
-									<span class="k">Dataset</span><span>{datasetLabel(layer)}</span>
-								</div>
-								<div class="line"><span class="k">Scale</span><span>{layer.scale}</span></div>
-								{#if layer.domain === 'flow'}
-									<div class="line">
-										<span class="k">Years</span>
-										<span
-											>{layer.yearMin === layer.yearMax
-												? layer.yearMin
-												: `${layer.yearMin}–${layer.yearMax}`}</span
-										>
-									</div>
-								{:else}
-									<div class="line"><span class="k">Year</span><span>{layer.year}</span></div>
-								{/if}
-								{#if layer.filters && Object.keys(layer.filters).length > 0}
-									{#each Object.entries(layer.filters) as [fieldId, vals] (fieldId)}
-										{#if vals && vals.length}
-											<div class="line">
-												<span class="k">{fieldLabel(fieldId)}</span>
-												<span class="chips">
-													{#each vals as v (v)}
-														<span class="chip">{valueLabel(layer, fieldId, v)}</span>
-													{/each}
-												</span>
-											</div>
-										{/if}
-									{/each}
-								{:else}
-									<div class="line">
-										<span class="k">Filters</span><span class="muted">none</span>
-									</div>
-								{/if}
-							{:else if layer.kind === 'calc'}
-								<div class="line"><span class="k">Scale</span><span>{layer.scale}</span></div>
-								<div class="line">
-									<span class="k">Expression</span><code>{layer.expression}</code>
-								</div>
-							{:else}
-								{@const input = layers.items.find((i) => i.id === layer.inputId)}
-								<div class="line">
-									<span class="k">Input</span>
-									<span class:muted={!input}>{input ? input.name : '— deleted —'}</span>
-								</div>
-								<div class="line"><span class="k">Scale</span><span>{layer.scale}</span></div>
-								<Field label="Kernel">
-									<select
-										value={layer.kernel}
-										onchange={(e) => onSmoothKernel(layer, e.currentTarget.value)}
-									>
-										<option value="exp">exponential</option>
-										<option value="gauss">gaussian</option>
-										<option value="power">power</option>
-									</select>
-								</Field>
-								<Field
-									label={layer.kernel === 'power' ? 'Exponent β' : 'Decay d₀ (km)'}
-									value={layer.decay}
-								>
-									<input
-										type="range"
-										min={layer.kernel === 'power' ? 0.5 : 0.1}
-										max={layer.kernel === 'power' ? 3 : 10}
-										step="0.1"
-										value={layer.decay}
-										oninput={(e) =>
-											layers.updateSmoothParams(
-												layer.id,
-												{ decay: +e.currentTarget.value },
-												{ persist: false }
-											)}
-										onchange={(e) =>
-											layers.updateSmoothParams(layer.id, { decay: +e.currentTarget.value })}
-									/>
-								</Field>
-								<Field label="Max distance (km)" value={layer.maxDist}>
-									<input
-										type="range"
-										min="0.5"
-										max="100"
-										step="0.5"
-										value={layer.maxDist}
-										oninput={(e) =>
-											layers.updateSmoothParams(
-												layer.id,
-												{ maxDist: +e.currentTarget.value },
-												{ persist: false }
-											)}
-										onchange={(e) =>
-											layers.updateSmoothParams(layer.id, { maxDist: +e.currentTarget.value })}
-									/>
-								</Field>
-								<KernelCurve kernel={layer.kernel} decay={layer.decay} maxDist={layer.maxDist} />
-								<Field label="Output">
-									<div class="seg" role="radiogroup" aria-label="Smoothing output">
-										<button
-											type="button"
-											class:active={layer.mode === 'mean'}
-											aria-pressed={layer.mode === 'mean'}
-											onclick={() => layers.updateSmoothParams(layer.id, { mode: 'mean' })}
-										>
-											Average
-										</button>
-										<button
-											type="button"
-											class:active={layer.mode === 'sum'}
-											aria-pressed={layer.mode === 'sum'}
-											onclick={() => layers.updateSmoothParams(layer.id, { mode: 'sum' })}
-										>
-											Sum
-										</button>
-									</div>
-								</Field>
-								<Field label="Include self">
-									<input
-										type="checkbox"
-										checked={layer.includeSelf}
-										onchange={(e) =>
-											layers.updateSmoothParams(layer.id, {
-												includeSelf: e.currentTarget.checked
-											})}
-									/>
-								</Field>
-							{/if}
-						</div>
-					{/if}
-				</li>
-			{/each}
-		</ul>
-		<div class="bulk-row">
-			<button
-				type="button"
-				class="bulk-del"
-				onclick={onRemoveAll}
-				title="Delete every saved layer (confirms first)"
-			>
-				Remove all saved layers
-			</button>
-		</div>
-	{/if}
-
 	<form class="calc" onsubmit={onSaveCalc}>
 		<div class="calc-head">Add calculation</div>
 		<Field label="Output">
@@ -657,11 +414,12 @@
 			<p class="hint">Save a node layer first — smoothing needs a node-domain input.</p>
 		{:else}
 			<Field label="Input">
-				<select value={smInput} onchange={(e) => (smInputId = e.currentTarget.value)}>
-					{#each nodeLayers as l (l.id)}
-						<option value={l.id}>{l.name}</option>
-					{/each}
-				</select>
+				<LayerPicker
+					mode="single"
+					layers={nodeLayers}
+					value={smInput}
+					onChange={(id) => (smInputId = /** @type {string | null} */ (id))}
+				/>
 			</Field>
 			<Field label="Kernel">
 				<select value={smKernel} onchange={(e) => onCreateKernel(e.currentTarget.value)}>
@@ -745,139 +503,9 @@
 		background: var(--color-line);
 		cursor: default;
 	}
-	.layers {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-1);
-	}
-	.layer {
-		display: grid;
-		grid-template-columns: auto auto 1fr auto auto;
-		align-items: center;
-		gap: var(--spacing-1);
-		font-size: var(--text-sm);
-		padding: 2px var(--spacing-1);
-		border-radius: var(--radius);
-	}
-	.layer.active {
-		background: rgba(31, 35, 40, 0.06);
-	}
-	.layer.off {
-		opacity: 0.5;
-	}
-	.layer.live {
-		font-style: italic;
-	}
-	.radio {
-		background: transparent;
-		border: none;
-		cursor: pointer;
-		font-size: var(--text-sm);
-		color: var(--color-muted);
-		padding: 0 2px;
-	}
-	.radio:disabled {
-		cursor: default;
-	}
-	.kind {
-		color: var(--color-hint);
-		font-size: var(--text-xs);
-		width: 1em;
-		text-align: center;
-	}
-	.name-btn {
-		background: transparent;
-		border: none;
-		cursor: pointer;
-		text-align: left;
-		padding: 0;
-		font: inherit;
-		color: var(--color-text);
-		display: flex;
-		gap: 4px;
-		align-items: baseline;
-		min-width: 0;
-	}
-	.name {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.slug {
-		color: var(--color-hint);
-		font-size: var(--text-xs);
-	}
-	.meta {
-		color: var(--color-hint);
-		font-size: var(--text-xs);
-		font-variant-numeric: tabular-nums;
-	}
-	.meta.err {
-		color: #cf222e;
-	}
-	.del {
-		background: transparent;
-		border: none;
-		color: var(--color-hint);
-		cursor: pointer;
-		font-size: var(--text-sm);
-		padding: 0 2px;
-	}
-	.del:hover {
-		color: var(--color-text);
-	}
-	.bulk-row {
-		display: flex;
-		justify-content: flex-end;
-		margin-top: var(--spacing-1);
-	}
-	.bulk-del {
-		background: transparent;
-		border: 1px solid var(--color-line);
-		border-radius: var(--radius);
-		padding: 2px var(--spacing-2);
-		font-size: var(--text-xs);
-		color: var(--color-muted);
-		cursor: pointer;
-	}
-	.bulk-del:hover {
-		border-color: var(--color-muted);
-		color: var(--color-text);
-	}
-	.details {
-		grid-column: 1 / -1;
-		margin-top: var(--spacing-1);
-		padding: var(--spacing-1) var(--spacing-2);
-		background: rgba(0, 0, 0, 0.03);
-		border-radius: var(--radius);
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		font-size: var(--text-xs);
-	}
-	.line {
-		display: grid;
-		grid-template-columns: 70px 1fr;
-		gap: var(--spacing-2);
-	}
-	.k {
-		color: var(--color-muted);
-	}
-	.chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 2px;
-	}
-	.chip {
-		padding: 0 var(--spacing-1);
-		border: 1px solid var(--color-line);
-		border-radius: var(--radius-pill);
-		background: #fff;
-		color: var(--color-muted);
-	}
+	/* Layer-list styles (.layers/.layer/.radio/.kind/.name-btn/.name/.slug/
+	   .meta/.del/.details/.line/.k/.chips/.chip) moved to SavedLayers.svelte
+	   along with the layer list itself. */
 	.calc {
 		display: flex;
 		flex-direction: column;

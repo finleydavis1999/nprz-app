@@ -2,10 +2,10 @@
 	"version": "0.0.1",
 	"configurations": [
 		{
-			"name": "vite dev",
-			"runtimeExecutable": "npm",
-			"runtimeArgs": ["run", "dev", "--", "--port", "5184", "--strictPort"],
-			"port": 5184
+			"name": "dev",
+			"runtimeExecutable": "npx",
+			"runtimeArgs": ["--no-install", "vite", "dev", "--port", "39375"],
+			"port": 39375
 		},
 		{
 			"name": "vite preview",

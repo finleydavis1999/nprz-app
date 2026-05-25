@@ -31,14 +31,45 @@
 		dataset?.fields?.year?.values?.find((y) => y.id === selection.year)?.label ?? selection.year
 	);
 
-	const sortedValues = $derived(
-		[...displayed.data.values()].filter((v) => Number.isFinite(v) && v > 0)
-	);
+	// Mirrors `/`: keep finite values regardless of sign so model residuals and
+	// other non-positive analytical layers render in print previews too. Same
+	// auto-diverging detection as the live page — keeps the print map visually
+	// consistent with what the user previewed before opening this route.
+	const sortedValues = $derived([...displayed.data.values()].filter((v) => Number.isFinite(v)));
+	const hasBothSigns = $derived.by(() => {
+		if (sortedValues.length === 0) return false;
+		let neg = false;
+		let pos = false;
+		for (const v of sortedValues) {
+			if (v < 0) neg = true;
+			else if (v > 0) pos = true;
+			if (neg && pos) return true;
+		}
+		return false;
+	});
+	const useDiverging = $derived(hasBothSigns && !cartography.forceSequential);
 	const breaks = $derived.by(() => {
 		if (sortedValues.length === 0) return null;
-		return classify(sortedValues, { method: cartography.method, n: cartography.n });
+		return useDiverging
+			? classify(sortedValues, {
+					method: 'diverging',
+					n: cartography.n,
+					pivot: 0,
+					subMethod: cartography.method
+				})
+			: classify(sortedValues, { method: cartography.method, n: cartography.n });
 	});
-	const colors = $derived(breaks ? paletteColors(cartography.palette, cartography.n) : []);
+	const colors = $derived(
+		breaks
+			? paletteColors(
+					useDiverging ? cartography.divergingPalette : cartography.palette,
+					cartography.n,
+					{
+						kind: useDiverging ? 'diverging' : 'sequential'
+					}
+				)
+			: []
+	);
 
 	// --- Flow side mirrors `/` route. Re-runs whenever flow state changes.
 	let flowResult = $state(
@@ -107,15 +138,40 @@
 			: []
 	);
 
-	const flowValues = $derived(
-		filteredFlows.map((f) => f.value).filter((v) => Number.isFinite(v) && v > 0)
-	);
+	const flowValues = $derived(filteredFlows.map((f) => f.value).filter((v) => Number.isFinite(v)));
+	// Same auto-diverging detection as the live page — keeps the print map
+	// visually consistent with what the user saw before opening this route.
+	const flowHasBothSigns = $derived.by(() => {
+		if (flowValues.length === 0) return false;
+		let neg = false;
+		let pos = false;
+		for (const v of flowValues) {
+			if (v < 0) neg = true;
+			else if (v > 0) pos = true;
+			if (neg && pos) return true;
+		}
+		return false;
+	});
+	const flowUseDiverging = $derived(flowHasBothSigns && !flowCartography.forceSequential);
 	const flowBreaks = $derived.by(() => {
 		if (flowValues.length === 0) return null;
-		return classify(flowValues, { method: flowCartography.method, n: flowCartography.n });
+		return flowUseDiverging
+			? classify(flowValues, {
+					method: 'diverging',
+					n: flowCartography.n,
+					pivot: 0,
+					subMethod: flowCartography.method
+				})
+			: classify(flowValues, { method: flowCartography.method, n: flowCartography.n });
 	});
 	const flowColors = $derived(
-		flowBreaks ? paletteColors(flowCartography.palette, flowCartography.n) : []
+		flowBreaks
+			? paletteColors(
+					flowUseDiverging ? flowCartography.divergingPalette : flowCartography.palette,
+					flowCartography.n,
+					{ kind: flowUseDiverging ? 'diverging' : 'sequential' }
+				)
+			: []
 	);
 
 	// Name lookup for pie labels + optional label layer.

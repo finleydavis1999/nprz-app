@@ -37,13 +37,29 @@
 	let installed = false;
 	let sourceLoaded = false;
 	let prevSelected = new Set();
+	// Track which area_codes carry a value from the previous `valueByArea` so we
+	// can `removeFeatureState` for any that fall out — without this, switching
+	// from a layer covering areas {A,B,C} to one covering only {A} leaves B and
+	// C stuck on stale colour values. Mirrors the `prevSelected`/`applySelection`
+	// pattern below.
+	let prevValueCodes = new Set();
 
 	function applyValues() {
 		const map = ctx.map;
 		if (!map || !installed || !sourceLoaded) return;
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- imperative diff buffer for setFeatureState; not Svelte state
+		const nextCodes = new Set();
 		for (const [areaCode, value] of valueByArea) {
 			map.setFeatureState({ source: sourceId, id: areaCode }, { value });
+			nextCodes.add(areaCode);
 		}
+		// Clear stale entries from the previous render.
+		for (const code of prevValueCodes) {
+			if (!nextCodes.has(code)) {
+				map.removeFeatureState({ source: sourceId, id: code }, 'value');
+			}
+		}
+		prevValueCodes = nextCodes;
 	}
 
 	function applySelection() {

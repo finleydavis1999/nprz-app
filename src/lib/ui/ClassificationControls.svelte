@@ -7,20 +7,40 @@
 	// state to drive the flow layer instead. Width/curvature sliders are shown
 	// only when those keys exist on the target (flow side); fill-opacity/line
 	// controls only when those keys exist (node side).
-	let { target = cartography } = $props();
+	//
+	// `useDiverging` is computed by the caller from the active layer's data
+	// (`hasBothSigns && !target.forceSequential`). When true, the palette
+	// picker shows DIVERGING palette names and writes to `target.divergingPalette`;
+	// when false, sequential names and `target.palette`. The user sees ONE
+	// palette dropdown that swaps option set + binding automatically.
+	let { target = cartography, useDiverging = false } = $props();
 
 	const methods = [
 		{ id: 'jenks', label: 'Jenks (natural breaks)' },
 		{ id: 'quantile', label: 'Quantile' },
 		{ id: 'equal', label: 'Equal interval' }
 	];
-	const palettes = paletteNames('sequential');
+	const seqPalettes = paletteNames('sequential');
+	const divPalettes = paletteNames('diverging');
+	const palettes = $derived(useDiverging ? divPalettes : seqPalettes);
 
 	const hasFill = $derived('fillOpacity' in target);
 	const hasLine = $derived('lineColor' in target);
 	const hasWidth = $derived('widthMin' in target && 'widthMax' in target);
 	const hasOpacity = $derived('opacity' in target);
 	const hasCurvature = $derived('curvature' in target);
+	const hasDiverging = $derived('divergingPalette' in target && 'forceSequential' in target);
+
+	// One-knob palette: read + write the field that matches the current
+	// mode. The "other" field stays as it was so a toggle of
+	// `forceSequential` restores the last choice for that mode.
+	function getPalette() {
+		return useDiverging ? target.divergingPalette : target.palette;
+	}
+	function setPalette(name) {
+		if (useDiverging) target.divergingPalette = name;
+		else target.palette = name;
+	}
 </script>
 
 <div class="stack">
@@ -36,13 +56,27 @@
 		<input type="number" min="3" max="9" bind:value={target.n} />
 	</Field>
 
-	<Field label="Palette">
-		<select bind:value={target.palette}>
+	<Field
+		label="Palette"
+		info={useDiverging
+			? 'Diverging palette — used because the active layer has both positive and negative values. Anchored at 0: the palette centre maps to zero, with classes on each side fit by the chosen Method. Toggle "Force sequential" below to override.'
+			: 'Sequential palette. When the active layer has both positive and negative values, this picker switches to diverging palettes (anchored at 0) automatically — toggle "Force sequential" to override.'}
+	>
+		<select value={getPalette()} onchange={(e) => setPalette(e.currentTarget.value)}>
 			{#each palettes as name (name)}
 				<option value={name}>{name}</option>
 			{/each}
 		</select>
 	</Field>
+
+	{#if hasDiverging}
+		<Field
+			label="Force sequential"
+			info="Override the auto-diverging detection — render signed data with the sequential palette + classification instead. Useful when you want to read signed values as 'all bad' rather than 'good vs bad'."
+		>
+			<input type="checkbox" bind:checked={target.forceSequential} />
+		</Field>
+	{/if}
 
 	{#if hasFill}
 		<Field label="Fill opacity" value={target.fillOpacity.toFixed(2)}>

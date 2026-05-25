@@ -367,4 +367,102 @@ test.describe('app', () => {
 		await expect(dock.locator('.layer', { hasText: 'e2e' })).toHaveCount(0);
 		await dock.locator('.dock-close').click();
 	});
+
+	test('model calculator dock opens and shows an add-model form when 2+ node layers exist', async ({
+		page
+	}) => {
+		// Reach a state with two saved node-domain filter layers — the minimum
+		// the add-model form requires (one dependent + one covariate).
+		const calc = page.locator('.dock', { hasText: 'Layer Calculator' });
+		const saveBtn = page.locator('.sidebar-left .save-row button', { hasText: 'Save layer' });
+		await saveBtn.click();
+		await saveBtn.click();
+		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
+		await expect(calc.locator('.layer:not(.live)')).toHaveCount(2);
+		await calc.locator('.dock-close').click();
+
+		// Open the Model dock and verify the add-model form is present.
+		const dock = page.locator('.dock', { hasText: 'Model Calculator' });
+		await expect(dock).toHaveCount(0);
+		await page.locator('.strip .tool', { hasText: 'Model Calculator' }).click();
+		await expect(dock).toBeVisible();
+		await expect(dock.locator('.add-head', { hasText: 'Add NLM model' })).toBeVisible();
+		// Dependent picker is auto-populated from the saved node layers.
+		const dependentOptions = dock.locator('select').first().locator('option');
+		await expect(dependentOptions).toHaveCount(2);
+		// At least one covariate checkbox is rendered (the other layer).
+		// LayerPicker (multi mode) renders each option as a .row with a checkbox.
+		await expect(dock.locator('.multi .row input[type="checkbox"]')).toHaveCount(1);
+		// COOP/COEP must be set for SharedArrayBuffer (webR's fast channel).
+		// This is the only way to check the headers without a separate request.
+		const resp = await page.request.get('/');
+		expect(resp.headers()['cross-origin-opener-policy']).toBe('same-origin');
+		expect(resp.headers()['cross-origin-embedder-policy']).toBe('require-corp');
+
+		// Clean up.
+		await dock.locator('.dock-close').click();
+		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
+		const layerRows = calc.locator('.layer:not(.live)');
+		// Delete each via the × button — count goes down on each removal.
+		while ((await layerRows.count()) > 0) {
+			await layerRows.first().locator('.del').click();
+		}
+		await calc.locator('.dock-close').click();
+	});
+
+	// Gated end-to-end webR fit test. Skipped by default because it pays the
+	// full webR boot + speedglm install on first run (~30-60s). Enable with
+	// `E2E_WITH_WEBR=1 npm run test:e2e` for the rare full-stack run before
+	// shipping changes to the model pipeline.
+	test('webR end-to-end: fit an NLM and verify children populate (gated)', async ({ page }) => {
+		test.skip(
+			process.env.E2E_WITH_WEBR !== '1',
+			'Set E2E_WITH_WEBR=1 to run the webR fit test (boots webR + installs speedglm)'
+		);
+		// Allow ~120s — first run downloads webR, installs speedglm + MASS +
+		// Matrix, then runs an actual fit.
+		test.setTimeout(120_000);
+
+		// Reach the same two-saved-layer baseline the previous test used.
+		const calc = page.locator('.dock', { hasText: 'Layer Calculator' });
+		const saveBtn = page.locator('.sidebar-left .save-row button', { hasText: 'Save layer' });
+		await saveBtn.click();
+		await saveBtn.click();
+		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
+		await expect(calc.locator('.layer:not(.live)')).toHaveCount(2);
+		await calc.locator('.dock-close').click();
+
+		// Open the Model dock and submit the auto-populated form.
+		await page.locator('.strip .tool', { hasText: 'Model Calculator' }).click();
+		const dock = page.locator('.dock', { hasText: 'Model Calculator' });
+		await expect(dock).toBeVisible();
+		// One covariate is rendered (the non-dependent layer); tick it.
+		await dock.locator('.multi .row input[type="checkbox"]').first().check();
+		await dock.locator('button', { hasText: 'Fit model' }).click();
+
+		// Wait for the fit to land — the parent row gets an R² meta when the
+		// fit succeeds. Generous timeout for the first-run webR cold start.
+		await expect(dock.locator('.layer.parent .meta', { hasText: /R²=/ })).toBeVisible({
+			timeout: 100_000
+		});
+
+		// SavedLayers should now list the two model-output children (fitted +
+		// residual) alongside the parent. Their slugs follow `<parent>_fitted` /
+		// `<parent>_residual`.
+		await dock.locator('.dock-close').click();
+		const savedLayers = page.locator('.sidebar-left .saved-layers');
+		await expect(savedLayers.locator('text=/_fitted/').first()).toBeVisible();
+		await expect(savedLayers.locator('text=/_residual/').first()).toBeVisible();
+
+		// Cleanup — remove the model parent (cascades children).
+		await page.locator('.strip .tool', { hasText: 'Model Calculator' }).click();
+		await dock.locator('.layer.parent .del').first().click();
+		await dock.locator('.dock-close').click();
+		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
+		const layerRows = calc.locator('.layer:not(.live)');
+		while ((await layerRows.count()) > 0) {
+			await layerRows.first().locator('.del').click();
+		}
+		await calc.locator('.dock-close').click();
+	});
 });

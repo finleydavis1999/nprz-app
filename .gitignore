@@ -29,6 +29,10 @@ test-results
 # /static/data/ is committed for GitLab Pages deploy; rebuild locally with `npm run data` and commit changes
 /raw-data
 
+# webR runtime — ~46MB copied from node_modules/webr/dist by scripts/setup-webr.sh.
+# Not committed: the setup script runs in CI and in setup-worktree.sh.
+/static/webr
+
 # Hardcoded users for `npm run users:seed` (commit only seed-users.json.example)
 /seed-users.json
 

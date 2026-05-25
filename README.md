@@ -48,16 +48,17 @@ raw-data/                  # source SQLite + geo (gitignored)
 
 ## Scripts
 
-| Script                      | What                                                          |
-| --------------------------- | ------------------------------------------------------------- |
-| `npm run dev`               | Vite dev server                                               |
-| `npm run data`              | Rebuild parquet + geo + manifest from `raw-data/`             |
-| `npm run build` / `preview` | Production build (adapter-node) + serve                       |
-| `npm run lint` / `format`   | Prettier + ESLint                                             |
-| `npm run test:e2e`          | Playwright e2e (auto-starts dev server)                       |
-| `npm run test:e2e:install`  | One-time Playwright browser install                           |
-| `npm run users:seed`        | Insert hardcoded users from `seed-users.json` into `local.db` |
-| `npm test`                  | Unit + e2e                                                    |
+| Script                             | What                                                                            |
+| ---------------------------------- | ------------------------------------------------------------------------------- |
+| `npm run dev`                      | Vite dev server                                                                 |
+| `npm run data`                     | Rebuild parquet + geo + manifest from `raw-data/`                               |
+| `npm run build` / `preview`        | Production build (adapter-node) + serve                                         |
+| `npm run lint` / `format`          | Prettier + ESLint                                                               |
+| `npm run test:e2e`                 | Playwright e2e (auto-starts dev server)                                         |
+| `E2E_WITH_WEBR=1 npm run test:e2e` | Same, but also runs the webR fit test (boots R-Wasm, installs speedglm — ~60 s) |
+| `npm run test:e2e:install`         | One-time Playwright browser install                                             |
+| `npm run users:seed`               | Insert hardcoded users from `seed-users.json` into `local.db`                   |
+| `npm test`                         | Unit + e2e                                                                      |
 
 ## Conventions
 

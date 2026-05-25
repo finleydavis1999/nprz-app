@@ -13,8 +13,30 @@ import { sveltekit } from '@sveltejs/kit/vite';
 // resolves to the project root itself, i.e. a no-op.
 const mainRepoRoot = dirname(realpathSync(join(import.meta.dirname, 'node_modules')));
 
+// Vite middleware to set cross-origin headers on every dev response.
+// SvelteKit's hooks.server.js only runs for page/endpoint responses, not for
+// Vite-served assets (static/, /@fs/, node_modules). Without these headers
+// on `/`, the document isn't cross-origin isolated and `SharedArrayBuffer` is
+// disabled — which breaks DuckDB-WASM's pthread workers and webR's fast
+// channel. CORP=cross-origin on every asset (including same-origin assets,
+// where it's harmless) keeps COEP=require-corp happy without us needing to
+// audit each fetch path. In production, the static adapter relies on the
+// hosting layer (or a worker) to apply the same headers — documented in
+// README under "Deployment".
+const crossOriginIsolationPlugin = {
+	name: 'cross-origin-isolation-dev',
+	configureServer(server) {
+		server.middlewares.use((_req, res, next) => {
+			res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+			res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+			res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+			next();
+		});
+	}
+};
+
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit()],
+	plugins: [crossOriginIsolationPlugin, tailwindcss(), sveltekit()],
 	server: {
 		fs: { allow: [mainRepoRoot] }
 	},

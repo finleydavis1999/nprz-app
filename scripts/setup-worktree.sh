@@ -36,3 +36,6 @@ echo "[setup-worktree] linked node_modules -> $MAIN/node_modules" >&2
 
 # .svelte-kit is gitignored/generated; create it so types resolve immediately.
 npx --no-install svelte-kit sync >/dev/null 2>&1 || true
+
+# webR runtime is gitignored (~46MB); sync from node_modules.
+bash scripts/setup-webr.sh >/dev/null 2>&1 || true

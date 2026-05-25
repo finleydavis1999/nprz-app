@@ -146,15 +146,27 @@
 		if (src) src.setData(featureCollection);
 	});
 
-	// Restyle without remounting on paint changes.
+	// Restyle without remounting on paint changes. Each setPaintProperty call
+	// is guarded with map.getLayer(...) because lineId/casingId are derived
+	// from sourceId — if a parent switches datasets (sourceId changes), the
+	// derived IDs flip to the new dataset before this effect runs, but the
+	// new layers haven't been mounted yet (onMount only fired for the
+	// original sourceId). MapLibre throws "Cannot style non-existing layer"
+	// otherwise. The guard makes the style call a no-op in that interim;
+	// the next mount installs the layers with the right styles from the
+	// start, so nothing is lost.
 	$effect(() => {
 		const map = ctx.map;
 		if (!map || !installed) return;
-		map.setPaintProperty(lineId, 'line-color', colorExpr);
-		map.setPaintProperty(lineId, 'line-width', widthExpr);
-		map.setPaintProperty(lineId, 'line-opacity', opacity);
-		map.setPaintProperty(casingId, 'line-width', casingWidthExpr);
-		map.setPaintProperty(casingId, 'line-opacity', casingOpacity);
+		if (map.getLayer(lineId)) {
+			map.setPaintProperty(lineId, 'line-color', colorExpr);
+			map.setPaintProperty(lineId, 'line-width', widthExpr);
+			map.setPaintProperty(lineId, 'line-opacity', opacity);
+		}
+		if (map.getLayer(casingId)) {
+			map.setPaintProperty(casingId, 'line-width', casingWidthExpr);
+			map.setPaintProperty(casingId, 'line-opacity', casingOpacity);
+		}
 	});
 
 	onDestroy(() => {
