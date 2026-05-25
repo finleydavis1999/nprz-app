@@ -167,6 +167,10 @@ test.describe('app', () => {
 	test('map layers panel toggles boundary, built-up, province, and basemap labels', async ({
 		page
 	}) => {
+		// Sequentially toggles three map overlays, polls basemap-label visibility
+		// twice, then navigates to /print which fetches ~2 MB of topojson before
+		// rendering. The 30s default is tight on slower runs; give it 90s.
+		test.slow();
 		const panel = page.locator('details.panel', { hasText: 'Map layers' });
 		// The fixed dock toggle strip overlaps the bottom-left; scroll the panel
 		// to the top of the sidebar so it and its controls clear the strip.
