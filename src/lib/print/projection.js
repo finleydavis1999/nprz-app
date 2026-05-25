@@ -12,9 +12,44 @@
 import { geoIdentity } from 'd3-geo';
 
 /**
+ * Build an RD-aware d3 projection for the print SVG.
+ *
+ * Two modes:
+ *  - "fit features" (default): scale/translate so the GeoJSON's full bbox fits
+ *    inside `size`. Used for nationwide previews.
+ *  - "fit extent": when `extent` is passed (`[[minX,minY],[maxX,maxY]]` in RD
+ *    metres), scale/translate so that bbox fills `size`. Used when the user
+ *    has framed a printable area on the live map.
+ *
  * @param {[number, number]} size [width, height] in SVG units
  * @param {GeoJSON.GeoJsonObject} features
+ * @param {[[number, number], [number, number]] | null} [extent]
  */
-export function rdProjection(size, features) {
-	return geoIdentity().reflectY(true).fitSize(size, features);
+export function rdProjection(size, features, extent = null) {
+	const p = geoIdentity().reflectY(true);
+	if (extent) {
+		// fitExtent takes [[x0,y0],[x1,y1]] target rect and a GeoJSON object;
+		// hand it a synthetic polygon whose bbox matches the requested RD extent.
+		const [[minX, minY], [maxX, maxY]] = extent;
+		const bboxFeature = {
+			type: 'Polygon',
+			coordinates: [
+				[
+					[minX, minY],
+					[maxX, minY],
+					[maxX, maxY],
+					[minX, maxY],
+					[minX, minY]
+				]
+			]
+		};
+		return p.fitExtent(
+			[
+				[0, 0],
+				[size[0], size[1]]
+			],
+			bboxFeature
+		);
+	}
+	return p.fitSize(size, features);
 }

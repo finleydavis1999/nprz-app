@@ -49,8 +49,41 @@
 		builtupOpacity = 0.5,
 		provinceUrl = /** @type {string | null} */ (null),
 		provinceColor = '#555555',
-		provinceWidth = 1.5
+		provinceWidth = 1.5,
+		// Optional RD bbox `[[minX,minY],[maxX,maxY]]` (metres). When set, the
+		// projection fits this extent into the SVG instead of fitting all
+		// features — used to mirror what the user framed on the live map.
+		extent = /** @type {[[number, number], [number, number]] | null} */ (null),
+		// Scale bar (bottom-left). Hidden when `null`.
+		showScaleBar = true,
+		// Place labels (city/town/region names) in RD coordinates, captured
+		// from the live map's Protomaps tiles at frame time. Rendered as SVG
+		// <text> with halo, styled by `kind`.
+		placeLabels = /** @type {{text:string, x:number, y:number, kind:string, kindDetail?:string, populationRank?:number}[]} */ ([]),
+		// Optional curation: keys (`text|kind`) the user has turned off, plus
+		// a minimum population-rank threshold (0 = no threshold). Higher
+		// threshold = fewer, more important labels. The underlying
+		// `placeLabels` array stays whole so toggling things back on doesn't
+		// need a re-capture.
+		disabledLabelKeys = /** @type {Set<string> | string[] | null} */ (null),
+		minPopulationRank = 0
 	} = $props();
+
+	// Resolve the user's curation to a Set for O(1) membership checks.
+	const disabledSet = $derived.by(() => {
+		if (!disabledLabelKeys) return null;
+		if (disabledLabelKeys instanceof Set) return disabledLabelKeys;
+		return new Set(disabledLabelKeys);
+	});
+
+	// Pre-filter so the template stays simple.
+	const visiblePlaceLabels = $derived(
+		placeLabels.filter(
+			(l) =>
+				(!disabledSet || !disabledSet.has(`${l.text}|${l.kind}`)) &&
+				(l.populationRank ?? 0) >= minPopulationRank
+		)
+	);
 
 	// Derive objectKey from the URL when not explicitly given.
 	// `geo/pc4.topo.json` → `pc4`. The R pipeline writes the same key.
@@ -139,9 +172,36 @@
 
 	const projection = $derived.by(() => {
 		if (!features) return null;
-		return rdProjection([width, height], features);
+		return rdProjection([width, height], features, extent);
 	});
 	const path = $derived.by(() => (projection ? geoPath(projection) : null));
+
+	// Scale bar geometry. For `geoIdentity()` over RD metres, the projection's
+	// `scale()` is the px-per-metre factor (modulo reflectY). We pick a target
+	// pixel length ~90px and round the corresponding ground distance to the
+	// nearest 1/2/5 × 10^n so the bar shows a "nice" round number.
+	const scaleBar = $derived.by(() => {
+		if (!showScaleBar || !projection) return null;
+		const pxPerMetre = projection.scale();
+		if (!Number.isFinite(pxPerMetre) || pxPerMetre <= 0) return null;
+		const targetPx = Math.min(120, width * 0.18);
+		const rawMetres = targetPx / pxPerMetre;
+		const niceMetres = niceRound(rawMetres);
+		const px = niceMetres * pxPerMetre;
+		const label = niceMetres >= 1000 ? `${niceMetres / 1000} km` : `${niceMetres} m`;
+		return { px, label };
+	});
+
+	function niceRound(v) {
+		if (v <= 0) return 0;
+		const exp = Math.floor(Math.log10(v));
+		const base = Math.pow(10, exp);
+		const f = v / base;
+		// Step to the nearest "nice" 1/2/5 multiplier — slightly biased downward
+		// so the bar never overshoots the target pixel width.
+		const step = f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10;
+		return step * base;
+	}
 
 	function fillFor(value) {
 		if (value == null || !breaks || breaks.length < 2) return nullColor;
@@ -370,6 +430,48 @@
 				{/each}
 			</g>
 		{/if}
+		{#if visiblePlaceLabels.length > 0 && projection}
+			<g class="place-labels">
+				{#each visiblePlaceLabels as p, i (`pl-${p.text}-${p.kind}-${i}`)}
+					{@const pt = projection([p.x, p.y])}
+					{#if pt}
+						<text
+							class="place-label place-label--{p.kind}"
+							x={pt[0]}
+							y={pt[1]}
+							text-anchor="middle"
+						>
+							{p.text}
+						</text>
+					{/if}
+				{/each}
+			</g>
+		{/if}
+		{#if scaleBar}
+			<g class="scalebar" transform="translate(20 {height - 24})">
+				<line
+					x1="0"
+					y1="0"
+					x2={scaleBar.px}
+					y2="0"
+					stroke="#1f2328"
+					stroke-width="2"
+					stroke-linecap="square"
+				/>
+				<line x1="0" y1="-4" x2="0" y2="4" stroke="#1f2328" stroke-width="1.5" />
+				<line
+					x1={scaleBar.px}
+					y1="-4"
+					x2={scaleBar.px}
+					y2="4"
+					stroke="#1f2328"
+					stroke-width="1.5"
+				/>
+				<text class="scalebar-label" x={scaleBar.px / 2} y="14" text-anchor="middle">
+					{scaleBar.label}
+				</text>
+			</g>
+		{/if}
 		{#if pies.items.length > 0}
 			<g class="pies">
 				{#each pies.items as p (p.code)}
@@ -434,5 +536,47 @@
 	}
 	.map-label {
 		font-size: 6px;
+	}
+	/* Basemap place labels — sized by hierarchy. Halo (paint-order: stroke)
+	   keeps the text legible against any choropleth colour underneath. */
+	.place-label {
+		font-family: system-ui, sans-serif;
+		fill: #1f2328;
+		paint-order: stroke;
+		stroke: rgba(255, 255, 255, 0.95);
+		stroke-width: 2.5;
+		stroke-linejoin: round;
+		font-weight: 500;
+		pointer-events: none;
+	}
+	.place-label--country {
+		font-size: 14px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+	.place-label--region {
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+	.place-label--locality {
+		font-size: 10px;
+		font-weight: 600;
+	}
+	.place-label--subplace {
+		font-size: 8px;
+		font-weight: 500;
+		fill: #4a5159;
+	}
+	.scalebar-label {
+		font-size: 10px;
+		font-family: system-ui, sans-serif;
+		fill: #1f2328;
+		paint-order: stroke;
+		stroke: rgba(255, 255, 255, 0.95);
+		stroke-width: 2.5;
+		stroke-linejoin: round;
 	}
 </style>

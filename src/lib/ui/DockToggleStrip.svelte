@@ -1,11 +1,20 @@
 <script>
 	import { resolve } from '$app/paths';
 	import { ui } from '$lib/state/ui.svelte.js';
+	import { printView } from '$lib/state/print-view.svelte.js';
 
 	const docks = /** @type {const} */ ([
 		{ id: 'calculator', label: 'Layer Calculator', glyph: 'ƒx', title: 'Layer Calculator' },
 		{ id: 'studyArea', label: 'Study area', glyph: '⌒', title: 'Study area & lasso' }
 	]);
+
+	function toggleFrame() {
+		printView.showOverlay = !printView.showOverlay;
+	}
+
+	function flipOrientation() {
+		printView.orientation = printView.orientation === 'portrait' ? 'landscape' : 'portrait';
+	}
 </script>
 
 <div class="strip" role="toolbar" aria-label="Tools">
@@ -21,6 +30,22 @@
 			<span class="label">{d.label}</span>
 		</button>
 	{/each}
+	<button
+		type="button"
+		class="tool"
+		class:active={printView.showOverlay}
+		onclick={toggleFrame}
+		title="Toggle A4 print-frame overlay on the map"
+	>
+		<span class="glyph">▭</span>
+		<span class="label">Frame</span>
+	</button>
+	{#if printView.showOverlay}
+		<button type="button" class="tool orient" onclick={flipOrientation} title="Flip A4 orientation">
+			<span class="glyph">{printView.orientation === 'portrait' ? '▯' : '▭'}</span>
+			<span class="label">{printView.orientation === 'portrait' ? 'Portrait' : 'Landscape'}</span>
+		</button>
+	{/if}
 	<a class="tool print" href={resolve('/print')} title="Print preview">
 		<span class="glyph">⎙</span>
 		<span class="label">Print</span>

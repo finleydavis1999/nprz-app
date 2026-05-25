@@ -318,7 +318,9 @@ test.describe('app', () => {
 		expect(pathCount).toBeGreaterThan(300);
 		// Title + footer present.
 		await expect(page.locator('.title')).toContainText('Persoonsgegevens');
-		await expect(page.locator('.footnote')).toContainText('EPSG:28992');
+		await expect(page.locator('.footnote')).toContainText('CBS microdata');
+		// Stylish single-segment scale bar rendered at bottom-left of the SVG.
+		await expect(page.locator('.sheet svg g.scalebar')).toBeVisible();
 		// Same node-classification breaks as the screen view.
 		const printBreaks = await page.locator('.legend .label').allTextContents();
 		expect(printBreaks).toEqual(screenBreaks);

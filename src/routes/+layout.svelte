@@ -8,6 +8,8 @@
 	import { layers } from '$lib/state/layers.svelte.js';
 	import { ui } from '$lib/state/ui.svelte.js';
 	import { flow } from '$lib/state/flow.svelte.js';
+	import { printView } from '$lib/state/print-view.svelte.js';
+	import { mapView } from '$lib/state/map-view.svelte.js';
 
 	let { children } = $props();
 
@@ -19,6 +21,8 @@
 		layers.load();
 		flow.load();
 		ui.load();
+		printView.load();
+		mapView.load();
 		hydrated = true;
 	});
 
@@ -42,6 +46,26 @@
 		void flow.minCount;
 		void flow.includeSelfLoops;
 		flow.persist();
+	});
+	// Persist print viewport state (orientation + framed RD extent + overlay
+	// toggle) so the user's framing survives reloads and navigations.
+	$effect(() => {
+		if (!hydrated) return;
+		void printView.orientation;
+		void printView.showOverlay;
+		void printView.rdExtent;
+		void printView.placeLabels;
+		void printView.disabledLabels;
+		void printView.minPopulationRank;
+		printView.persist();
+	});
+	// Persist live-map view (center + zoom) so the user's framing of the
+	// map survives navigation to `/print` and back, and across reloads.
+	$effect(() => {
+		if (!hydrated) return;
+		void mapView.center;
+		void mapView.zoom;
+		mapView.persist();
 	});
 	$effect(() => {
 		if (!manifestState.data) return;

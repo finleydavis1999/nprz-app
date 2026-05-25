@@ -32,6 +32,7 @@
 	import InspectInteraction from '$lib/map/InspectInteraction.svelte';
 	import NodeNamesLayer from '$lib/map/NodeNamesLayer.svelte';
 	import FlowPies from '$lib/map/FlowPies.svelte';
+	import PrintFrameOverlay from '$lib/map/PrintFrameOverlay.svelte';
 	import Legend from '$lib/cartography/Legend.svelte';
 	import { runFlows } from '$lib/data/flowQuery.js';
 	import { schedulePrefetch } from '$lib/data/prefetch.js';
@@ -47,6 +48,7 @@
 	import { displayed, layers } from '$lib/state/layers.svelte.js';
 	import { flow, flowCartography } from '$lib/state/flow.svelte.js';
 	import { ui } from '$lib/state/ui.svelte.js';
+	import { printView } from '$lib/state/print-view.svelte.js';
 	import { geoNames } from '$lib/state/geo-names.svelte.js';
 	import { scaleLabel, scaleUnit } from '$lib/scales.js';
 
@@ -285,12 +287,11 @@
 </script>
 
 <div style="position: fixed; inset: 0;">
-	<MapView
-		center={MAP_DEFAULTS.center}
-		zoom={MAP_DEFAULTS.zoom}
-		apiKey={PUBLIC_PROTOMAPS_API_KEY}
-		theme="white"
-	>
+	<!-- Initial center/zoom are owned by the `mapView` singleton (which seeds
+	     itself from MAP_DEFAULTS) so the view persists across navigations.
+	     `MAP_DEFAULTS` is still imported above — `resetAll` uses it for the
+	     map.jumpTo() snap-back. -->
+	<MapView apiKey={PUBLIC_PROTOMAPS_API_KEY} theme="white">
 		{#if manifest && geoMain}
 			{#if selection.enabled}
 				{#key selection.scale}
@@ -370,6 +371,9 @@
 				/>
 			{/if}
 			<BasemapLabelsLayer visible={mapLayers.labels} />
+		{/if}
+		{#if printView.showOverlay}
+			<PrintFrameOverlay />
 		{/if}
 	</MapView>
 </div>

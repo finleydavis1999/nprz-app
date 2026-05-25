@@ -44,6 +44,19 @@ export function labelLayerIds(map) {
 }
 
 /**
+ * Ids of Protomaps **place** label layers only — countries, regions, cities,
+ * towns, etc. Excludes roads, POIs, water labels. Used by the print frame
+ * overlay to snapshot the visible place names for the SVG print map.
+ *
+ * Protomaps' v4 theme names these `places_country` / `places_region` /
+ * `places_locality` / `places_subplace` / etc., so the `places_` prefix is
+ * a reliable filter.
+ */
+export function placeLabelLayerIds(map) {
+	return labelLayerIds(map).filter((id) => id.startsWith('places_'));
+}
+
+/**
  * Resolve a `beforeId` for `map.addLayer()`. Returns the anchor when it exists,
  * else the first basemap label (so app layers still stay below the labels),
  * else `undefined` (empty style — the layer simply appends on top).
