@@ -1,5 +1,25 @@
 <script>
-	let { breaks, colors, format = (n) => Math.round(n).toLocaleString(), title = '' } = $props();
+	// Pick decimals so a 0–1 percentage legend doesn't collapse to "0 – 0"
+	// while keeping integer-valued data integer (OViN flows, populations).
+	function pickDecimals(breaks) {
+		if (!breaks || breaks.length < 2) return 0;
+		if (breaks.every((b) => Number.isInteger(b))) return 0;
+		const range = Math.abs(breaks[breaks.length - 1] - breaks[0]);
+		if (!Number.isFinite(range) || range === 0) return 0;
+		return Math.max(0, Math.min(6, 2 - Math.floor(Math.log10(range))));
+	}
+
+	let { breaks, colors, format, title = '' } = $props();
+
+	const decimals = $derived(pickDecimals(breaks));
+	const fmt = $derived(
+		format ??
+			((n) =>
+				n.toLocaleString(undefined, {
+					minimumFractionDigits: decimals,
+					maximumFractionDigits: decimals
+				}))
+	);
 </script>
 
 <div class="legend">
@@ -7,7 +27,7 @@
 	{#each colors as color, i (i)}
 		<div class="row">
 			<span class="swatch" style="background: {color}"></span>
-			<span class="label">{format(breaks[i])} – {format(breaks[i + 1])}</span>
+			<span class="label">{fmt(breaks[i])} – {fmt(breaks[i + 1])}</span>
 		</div>
 	{/each}
 </div>

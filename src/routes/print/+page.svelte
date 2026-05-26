@@ -133,7 +133,8 @@
 	const filteredFlows = $derived(
 		flowResult
 			? flowResult.flows.filter(
-					(f) => f.value >= flow.minWeight && (f.count == null || f.count >= flow.minCount)
+					(f) =>
+						Math.abs(f.value) >= flow.minWeight && (f.count == null || f.count >= flow.minCount)
 				)
 			: []
 	);

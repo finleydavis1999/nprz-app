@@ -23,9 +23,11 @@ const DEFAULTS = Object.freeze({
 	yearMin: 2018,
 	yearMax: 2018,
 	filters: /** @type {Record<string, number[]>} */ ({}),
-	// Client-side filters: only render flows whose post-aggregation value is
-	// >= minWeight and (on weighted layers) whose observation count is
-	// >= minCount. Updates do not re-query DuckDB.
+	// Client-side filters: only render flows whose post-aggregation
+	// *magnitude* (|value|) is >= minWeight and (on weighted layers) whose
+	// observation count is >= minCount. The abs() lets signed flow data
+	// (SIM residuals etc.) filter symmetrically by strength rather than
+	// dropping every negative value. Updates do not re-query DuckDB.
 	minWeight: 0,
 	minCount: 0,
 	includeSelfLoops: false

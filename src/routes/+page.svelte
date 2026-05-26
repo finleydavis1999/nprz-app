@@ -119,7 +119,11 @@
 	 */
 	function flowPercentileThreshold(flows, topFraction) {
 		if (flows.length === 0) return 0;
-		const sorted = flows.map((f) => f.value).sort((a, b) => a - b);
+		// Sort by magnitude — min-weight filtering compares `|value|`, so the
+		// "top N% strongest" anchor must be picked over abs values too.
+		// Otherwise signed datasets (SIM residuals) anchor on the top of the
+		// positive tail and leave most of the negative tail invisible.
+		const sorted = flows.map((f) => Math.abs(f.value)).sort((a, b) => a - b);
 		const idx = Math.min(Math.floor(sorted.length * (1 - topFraction)), sorted.length - 1);
 		return sorted[idx] ?? 0;
 	}
@@ -207,11 +211,17 @@
 				}
 				if (res.flows.length === 0) {
 					// Nothing to anchor against; leave threshold for next non-empty result.
-				} else if (layerChanged || flow.minWeight > res.max) {
-					// Layer switch, or user's saved threshold is out of range for the
-					// new result — re-anchor at the percentile instead of dropping
-					// to zero (which would render every flow).
-					flow.minWeight = flowPercentileThreshold(res.flows, FLOW_DEFAULT_TOP_FRACTION);
+				} else {
+					// The slider compares against `|value|`, so the effective upper
+					// bound is the larger of |min| and |max| — for signed data the
+					// most-negative residual matters as much as the most-positive.
+					const absMax = Math.max(Math.abs(res.min), Math.abs(res.max));
+					if (layerChanged || flow.minWeight > absMax) {
+						// Layer switch, or user's saved threshold is out of range for
+						// the new result — re-anchor at the percentile instead of
+						// dropping to zero (which would render every flow).
+						flow.minWeight = flowPercentileThreshold(res.flows, FLOW_DEFAULT_TOP_FRACTION);
+					}
 				}
 			})
 			.catch((e) => {
@@ -295,7 +305,8 @@
 	const filteredFlowsAll = $derived(
 		effectiveFlowResult
 			? effectiveFlowResult.flows.filter(
-					(f) => f.value >= flow.minWeight && (f.count == null || f.count >= flow.minCount)
+					(f) =>
+						Math.abs(f.value) >= flow.minWeight && (f.count == null || f.count >= flow.minCount)
 				)
 			: []
 	);
@@ -425,9 +436,15 @@
 	});
 
 	// Flow-filter slider bounds — driven by the current full result so the
-	// sliders don't jump as the user drags them.
-	const flowMinValue = $derived(effectiveFlowResult?.min ?? 0);
-	const flowMaxValue = $derived(effectiveFlowResult?.max ?? 0);
+	// sliders don't jump as the user drags them. The min-weight filter
+	// compares against `|value|`, so the slider spans [0, max(|min|, |max|)].
+	// For non-negative datasets this collapses to [0, max] (unchanged).
+	const flowMinValue = 0;
+	const flowMaxValue = $derived(
+		effectiveFlowResult
+			? Math.max(Math.abs(effectiveFlowResult.min), Math.abs(effectiveFlowResult.max))
+			: 0
+	);
 	// Weighted layers (OViN/ODiN) expose a raw observation count → Min count filter.
 	const flowWeighted = $derived(effectiveFlowResult?.weighted ?? false);
 	const flowCountMax = $derived.by(() => {
