@@ -6,8 +6,9 @@
 # every script/wasm a webR boot fetches must come from our origin (or send the
 # matching CORP header).
 #
-# Re-run when the webr npm package is bumped: the source-file mtimes change and
-# rsync notices. No-op when up-to-date.
+# Re-run when the webr npm package is bumped. Idempotent: wipes the destination
+# and copies fresh, so removed/renamed source files don't linger. Uses only
+# POSIX tools so it works on CI images (e.g. node:22) that lack rsync.
 
 set -euo pipefail
 
@@ -22,17 +23,14 @@ if [ ! -d "$SRC" ]; then
   exit 1
 fi
 
+rm -rf "$DST"
 mkdir -p "$DST"
 
-# Exclude dev-only assets: the demo REPL, the test fixtures, and the TypeScript
+cp -R "$SRC/." "$DST/"
+
+# Prune dev-only assets: the demo REPL, the test fixtures, and the TypeScript
 # declaration directory (.d.ts files are already bundled into webr.mjs's types).
-rsync -a --delete \
-  --exclude='repl/' \
-  --exclude='tests/' \
-  --exclude='webR/' \
-  --exclude='*.d.ts' \
-  --exclude='*.cjs.map' \
-  --exclude='*.mjs.map' \
-  "$SRC/" "$DST/"
+rm -rf "$DST/repl" "$DST/tests" "$DST/webR"
+find "$DST" -type f \( -name '*.d.ts' -o -name '*.cjs.map' -o -name '*.mjs.map' \) -delete
 
 echo "[setup-webr] synced webR -> $DST ($(du -sh "$DST" | cut -f1))" >&2
