@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
+		"prebuild": "bash scripts/setup-webr.sh",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "(svelte-kit sync || true) && (git config core.hooksPath .githooks 2>/dev/null || true)",
