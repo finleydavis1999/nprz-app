@@ -4,5 +4,7 @@
 
 export const MAP_DEFAULTS = Object.freeze({
 	center: /** @type {[number, number]} */ ([5.3, 52.1]),
-	zoom: 7
+	zoom: 7,
+	pitch: 0,
+	bearing: 0
 });
