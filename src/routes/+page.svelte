@@ -526,6 +526,7 @@
 							flows={filteredFlows}
 							{centroids}
 							scale={flow.scale}
+							minWeight={flow.minWeight}
 						/>
 					{/if}
 				{/key}
@@ -720,6 +721,7 @@
 			{flowValues}
 			{flowBreaks}
 			{flowColors}
+			flowMinWeight={flow.minWeight}
 		/>
 	</Panel>
 

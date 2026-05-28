@@ -17,7 +17,8 @@
 		flowsByPair = new Map(),
 		flowValues = [],
 		flowBreaks = null,
-		flowColors = []
+		flowColors = [],
+		flowMinWeight = 0
 	} = $props();
 
 	// Pinned (clicked) wins over hovered for the displayed target — so once a
@@ -40,8 +41,28 @@
 
 	const flowEdge = $derived.by(() => {
 		if (target?.kind !== 'flow') return null;
-		return flowsByPair.get(`${target.o}|${target.d}`) ?? null;
+		const forward = flowsByPair.get(`${target.o}|${target.d}`) ?? null;
+		const reverse = flowsByPair.get(`${target.d}|${target.o}`) ?? null;
+		if (!forward && !reverse) return null;
+		return {
+			fwdVal: forward?.value ?? 0,
+			revVal: reverse?.value ?? 0,
+			fwdCount: forward?.count ?? null,
+			revCount: reverse?.count ?? null,
+			reverseMissing: !reverse,
+			total: (forward?.value ?? 0) + (reverse?.value ?? 0),
+			net: (forward?.value ?? 0) - (reverse?.value ?? 0)
+		};
 	});
+
+	// Reverse direction may have been filtered out by the min-weight slider.
+	// We can't show its true value (it's not in the filtered set), but we can
+	// honestly say it's below the threshold rather than claiming it's zero.
+	// minWeight === 0 is the only case where a missing reverse is genuinely 0.
+	function fmtReverse(edge) {
+		if (!edge.reverseMissing) return fmt(edge.revVal);
+		return flowMinWeight > 0 ? `< ${fmt(flowMinWeight)}` : '0';
+	}
 </script>
 
 <div class="inspect">
@@ -114,21 +135,39 @@
 			{#if pinned}<span class="pin">📌</span>{/if}
 		</div>
 		<div class="value-row">
-			<span class="value-label">value</span>
-			<span class="value">{fmt(flowEdge?.value)}</span>
+			<span class="value-label" style:color="#d62728">{oName} → {dName}</span>
+			<span class="value"
+				>{fmt(flowEdge?.fwdVal)}{#if flowEdge?.fwdCount != null}<span class="sub">
+						· {flowEdge.fwdCount.toLocaleString()} obs</span
+					>{/if}</span
+			>
 		</div>
-		{#if flowEdge?.count != null}
-			<div class="value-row">
-				<span class="value-label">count</span>
-				<span class="value">{flowEdge.count.toLocaleString()}</span>
-			</div>
-		{/if}
+		<div class="value-row">
+			<span class="value-label" style:color="#1f77b4">{dName} → {oName}</span>
+			<span class="value"
+				>{flowEdge ? fmtReverse(flowEdge) : '—'}{#if flowEdge?.revCount != null}<span class="sub">
+						· {flowEdge.revCount.toLocaleString()} obs</span
+					>{/if}</span
+			>
+		</div>
+		<div class="value-row total">
+			<span class="value-label">total</span>
+			<span class="value"
+				>{fmt(flowEdge?.total)}{#if flowEdge?.reverseMissing && flowMinWeight > 0}<span class="sub">
+						(partial)</span
+					>{/if}</span
+			>
+		</div>
+		<div class="value-row">
+			<span class="value-label">net ({oName})</span>
+			<span class="value">{fmt(flowEdge?.net)}</span>
+		</div>
 		{#if flowBreaks && flowValues.length}
 			<Histogram
 				values={flowValues}
 				breaks={flowBreaks}
 				colors={flowColors}
-				highlightValue={flowEdge?.value ?? null}
+				highlightValue={flowEdge?.fwdVal ?? null}
 			/>
 		{/if}
 	{/if}
@@ -192,6 +231,15 @@
 		font-size: var(--text-base);
 		font-weight: 600;
 		color: var(--color-text);
+	}
+	.sub {
+		font-size: var(--text-xs);
+		color: var(--color-muted);
+		font-weight: 400;
+	}
+	.value-row.total {
+		border-top: 1px solid var(--color-line);
+		padding-top: 2px;
 	}
 	.divider {
 		border-top: 1px solid var(--color-line);

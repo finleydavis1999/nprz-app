@@ -18,7 +18,8 @@
 		maxRadius = 26,
 		minRadius = 4,
 		inflowColor = '#1f77b4',
-		outflowColor = '#d62728'
+		outflowColor = '#d62728',
+		minWeight = 0
 	} = $props();
 
 	const ctx = getMapContext();
@@ -97,6 +98,13 @@
 		if (Math.abs(v) >= 100) return v.toFixed(0);
 		if (Math.abs(v) >= 1) return v.toFixed(1);
 		return v.toFixed(2);
+	}
+	// Like fmt(), but a literal-zero direction when a min-weight filter is
+	// active means "filtered below threshold", not "genuinely zero" — label it
+	// honestly. Only applies to exact 0; a small non-zero sum is shown as-is.
+	function fmtDir(v) {
+		if (v === 0 && minWeight > 0) return `< ${fmt(minWeight)}`;
+		return fmt(v);
 	}
 
 	// Inline " · N obs" suffix for tooltip rows (weighted layers only).
@@ -216,7 +224,9 @@
 							stroke-dasharray="3 2"
 						/>
 					{/if}
-					<text class="label" x={p.x + r + 4} y={p.y + 4}>{p.name}</text>
+					{#if p.primary || p.code === hoveredCode}
+						<text class="label" x={p.x + r + 4} y={p.y + 4}>{p.name}</text>
+					{/if}
 				</g>
 			{/each}
 		</svg>
@@ -230,25 +240,25 @@
 				<div class="tt-name">{hoveredItem.name}{hoveredItem.primary ? ' — selected' : ''}</div>
 				{#if hoveredItem.primary}
 					<div class="tt-row" style:color={inflowColor}>
-						Total inflow: {fmt(hoveredItem.inflow)}{#if hoveredItem.inCount > 0}<span
+						Total inflow: {fmtDir(hoveredItem.inflow)}{#if hoveredItem.inCount > 0}<span
 								class="tt-count">{obsLabel(hoveredItem.inCount)}</span
 							>{/if}
 					</div>
 					<div class="tt-row" style:color={outflowColor}>
-						Total outflow: {fmt(hoveredItem.outflow)}{#if hoveredItem.outCount > 0}<span
+						Total outflow: {fmtDir(hoveredItem.outflow)}{#if hoveredItem.outCount > 0}<span
 								class="tt-count">{obsLabel(hoveredItem.outCount)}</span
 							>{/if}
 					</div>
 				{:else}
 					<div class="tt-row" style:color={inflowColor}>
-						{selectedName} → {hoveredItem.name}: {fmt(
+						{selectedName} → {hoveredItem.name}: {fmtDir(
 							hoveredItem.inflow
 						)}{#if hoveredItem.inCount > 0}<span class="tt-count"
 								>{obsLabel(hoveredItem.inCount)}</span
 							>{/if}
 					</div>
 					<div class="tt-row" style:color={outflowColor}>
-						{hoveredItem.name} → {selectedName}: {fmt(
+						{hoveredItem.name} → {selectedName}: {fmtDir(
 							hoveredItem.outflow
 						)}{#if hoveredItem.outCount > 0}<span class="tt-count"
 								>{obsLabel(hoveredItem.outCount)}</span
