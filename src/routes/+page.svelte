@@ -54,6 +54,7 @@
 	import { printView } from '$lib/state/print-view.svelte.js';
 	import { geoNames } from '$lib/state/geo-names.svelte.js';
 	import { scaleLabel, scaleUnit } from '$lib/scales.js';
+	import DirectionalFlowLayer from '$lib/map/DirectionalFlowLayer.svelte';
 
 	let { data } = $props();
 	let lassoActive = $state(false);
@@ -318,6 +319,51 @@
 			return true;
 		});
 	});
+	// Merge bidirectional pairs into single entries for directional-gradient
+	// rendering. Each pair is keyed canonically (smaller area_code first) so
+	// A→B and B→A collapse to one entry regardless of encounter order.
+	// `fwdVal` is the flow in the canonical o→d direction, `revVal` the
+	// reverse. `total` drives line width; the fwd/total ratio drives the
+	// gradient split point. Only computed when directional mode is on.
+	const directionalFlows = $derived.by(() => {
+		if (!flowCartography.directional) return [];
+		/** @type {Map<string, {o: string, d: string, fwdVal: number, revVal: number}>} */
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local accumulator, not reactive state
+		const pairs = new Map();
+		for (const f of filteredFlows) {
+			// Canonical orientation: smaller code is always `o`.
+			const forward = f.o < f.d;
+			const o = forward ? f.o : f.d;
+			const d = forward ? f.d : f.o;
+			const key = `${o}|${d}`;
+			let pair = pairs.get(key);
+			if (!pair) {
+				pair = { o, d, fwdVal: 0, revVal: 0 };
+				pairs.set(key, pair);
+			}
+			if (forward) pair.fwdVal += f.value;
+			else pair.revVal += f.value;
+		}
+		const out = [];
+		const minW = flow.minWeight;
+		for (const p of pairs.values()) {
+			const total = p.fwdVal + p.revVal;
+			if (total <= 0) continue;
+			// Honest sliver: if one direction is entirely absent AND a min-weight
+			// filter is active, the absence almost always means "filtered below
+			// threshold" rather than "truly zero" — so show a thin band of the
+			// minority color rather than a pure single-color line. At minWeight=0
+			// an absent direction is genuinely zero, so leave it pure.
+			let fwdFrac = p.fwdVal / total;
+			if (minW > 0) {
+				if (p.revVal === 0)
+					fwdFrac = 0.95; // reverse filtered → 5% blue sliver at the d end
+				else if (p.fwdVal === 0) fwdFrac = 0.1; // forward filtered → 5% red sliver at the o end
+			}
+			out.push({ ...p, total, value: total, fwdFrac });
+		}
+		return out;
+	});
 	const flowsCapped = $derived(filteredFlowsAll.length > FLOW_RENDER_CAP);
 	const filteredFlows = $derived.by(() => {
 		if (!flowsCapped) return filteredFlowsAll;
@@ -505,35 +551,66 @@
 					/>
 				{/key}
 			{/if}
-			{#if flowsShown && filteredFlows.length && flowBreaks && centroids}
-				{#key `${flow.dataset}-${flow.scale}`}
-					<FlowLayer
-						sourceId="flow-{flow.dataset}-{flow.scale}"
-						flows={filteredFlows}
-						{centroids}
-						breaks={flowBreaks}
-						colors={flowColors}
-						widthMin={flowCartography.widthMin}
-						widthMax={flowCartography.widthMax}
-						opacity={flowCartography.opacity}
-						curvature={flowCartography.curvature}
-						selectedNode={ui.selectedFlowNode}
-						mode={ui.flowMode}
-					/>
-					{#if ui.selectedFlowNode}
-						<FlowPies
+			{#if flowsShown && centroids}
+				{#if flowCartography.directional && directionalFlows.length}
+					{#key `dir-${flow.dataset}-${flow.scale}`}
+						<DirectionalFlowLayer
+							sourceId="flow-directional-{flow.dataset}-{flow.scale}"
+							pairs={directionalFlows}
+							{centroids}
+							widthMin={flowCartography.widthMin}
+							widthMax={flowCartography.widthMax}
+							opacity={flowCartography.opacity}
+							curvature={flowCartography.curvature}
+							method={flowCartography.method}
+							n={flowCartography.n}
 							selectedNode={ui.selectedFlowNode}
+							mode={ui.flowMode}
+						/>
+						{#if ui.selectedFlowNode}
+							<FlowPies
+								selectedNode={ui.selectedFlowNode}
+								flows={filteredFlows}
+								{centroids}
+								scale={flow.scale}
+								minWeight={flow.minWeight}
+							/>
+						{/if}
+					{/key}
+				{:else if filteredFlows.length && flowBreaks}
+					{#key `${flow.dataset}-${flow.scale}`}
+						<FlowLayer
+							sourceId="flow-{flow.dataset}-{flow.scale}"
 							flows={filteredFlows}
 							{centroids}
-							scale={flow.scale}
-							minWeight={flow.minWeight}
+							breaks={flowBreaks}
+							colors={flowColors}
+							widthMin={flowCartography.widthMin}
+							widthMax={flowCartography.widthMax}
+							opacity={flowCartography.opacity}
+							curvature={flowCartography.curvature}
+							selectedNode={ui.selectedFlowNode}
+							mode={ui.flowMode}
 						/>
-					{/if}
-				{/key}
+						{#if ui.selectedFlowNode}
+							<FlowPies
+								selectedNode={ui.selectedFlowNode}
+								flows={filteredFlows}
+								{centroids}
+								scale={flow.scale}
+								minWeight={flow.minWeight}
+							/>
+						{/if}
+					{/key}
+				{/if}
 			{/if}
 			<InspectInteraction
 				nodeFillLayerId="choropleth-{selection.scale}-fill"
-				flowLineLayerId={flow.enabled ? `flow-${flow.dataset}-${flow.scale}-line` : null}
+				flowLineLayerId={flow.enabled
+					? flowCartography.directional
+						? `flow-directional-${flow.dataset}-${flow.scale}-line`
+						: `flow-${flow.dataset}-${flow.scale}-line`
+					: null}
 				nodeScale={selection.scale}
 				flowScale={flow.scale}
 				flowEnabled={flow.enabled}
@@ -738,6 +815,7 @@
 
 	<Panel title="Flow cartography" open={false}>
 		<div class="stack">
+			<Toggle bind:checked={flowCartography.directional} label="Directional gradient" />
 			<ClassificationControls target={flowCartography} useDiverging={flowUseDiverging} />
 		</div>
 	</Panel>
@@ -789,7 +867,7 @@
 				title: displayed.activeLayer?.name ?? 'Areas'
 			}
 		: null}
-	flow={flowsShown
+	flow={flowsShown && !flowCartography.directional
 		? {
 				breaks: flowBreaks,
 				colors: flowColors,

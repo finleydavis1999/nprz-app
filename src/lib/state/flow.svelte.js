@@ -47,7 +47,11 @@ const CARTO_DEFAULTS = Object.freeze({
 	widthMin: 0.5,
 	widthMax: 8,
 	opacity: 0.75,
-	curvature: 0.2
+	curvature: 0.2,
+	// Directional gradient mode: render one line per bidirectional pair,
+	// width by total flow, color as a red→blue gradient split at the
+	// directional proportion. Off = classic per-direction stepped lines.
+	directional: false
 });
 
 class FlowState {
@@ -129,6 +133,7 @@ class FlowCartographyState {
 	widthMax = $state(CARTO_DEFAULTS.widthMax);
 	opacity = $state(CARTO_DEFAULTS.opacity);
 	curvature = $state(CARTO_DEFAULTS.curvature);
+	directional = $state(CARTO_DEFAULTS.directional);
 
 	reset() {
 		applyDefaults(this, CARTO_DEFAULTS);

@@ -49,11 +49,19 @@
 			revVal: reverse?.value ?? 0,
 			fwdCount: forward?.count ?? null,
 			revCount: reverse?.count ?? null,
+			// Either direction can be the one filtered out by the min-weight
+			// slider. In classic mode you click a rendered line (so the forward
+			// always survived), but in directional mode the feature's o/d are the
+			// canonical pair orientation — the clicked "forward" may be the
+			// filtered-out weak direction. So track both presences and label
+			// both honestly.
+			forwardMissing: !forward,
 			reverseMissing: !reverse,
 			total: (forward?.value ?? 0) + (reverse?.value ?? 0),
 			net: (forward?.value ?? 0) - (reverse?.value ?? 0)
 		};
 	});
+
 	// Inline directional pie: a small two-slice circle showing the o->d vs
 	// d->o split. Fixed radius (it encodes proportion, not magnitude). Returns
 	// the SVG path for the forward (o->d) slice; the reverse is the rest of
@@ -81,12 +89,13 @@
 		return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
 	}
 
-	// Reverse direction may have been filtered out by the min-weight slider.
-	// We can't show its true value (it's not in the filtered set), but we can
-	// honestly say it's below the threshold rather than claiming it's zero.
-	// minWeight === 0 is the only case where a missing reverse is genuinely 0.
-	function fmtReverse(edge) {
-		if (!edge.reverseMissing) return fmt(edge.revVal);
+	// A direction's value is honest as-is when present. When absent it was
+	// filtered below the min-weight threshold (not genuinely zero) — so show
+	// "< {threshold}" rather than "0.000". minWeight === 0 is the only case
+	// where a missing direction is truly zero. Applies to BOTH directions
+	// because in directional mode either can be the filtered one.
+	function fmtDirectional(val, present) {
+		if (present) return fmt(val);
 		return flowMinWeight > 0 ? `< ${fmt(flowMinWeight)}` : '0';
 	}
 </script>
@@ -163,7 +172,9 @@
 		<div class="value-row">
 			<span class="value-label" style:color="#d62728">{oName} → {dName}</span>
 			<span class="value"
-				>{fmt(flowEdge?.fwdVal)}{#if flowEdge?.fwdCount != null}<span class="sub">
+				>{flowEdge
+					? fmtDirectional(flowEdge.fwdVal, !flowEdge.forwardMissing)
+					: '—'}{#if flowEdge?.fwdCount != null}<span class="sub">
 						· {flowEdge.fwdCount.toLocaleString()} obs</span
 					>{/if}</span
 			>
@@ -171,7 +182,9 @@
 		<div class="value-row">
 			<span class="value-label" style:color="#1f77b4">{dName} → {oName}</span>
 			<span class="value"
-				>{flowEdge ? fmtReverse(flowEdge) : '—'}{#if flowEdge?.revCount != null}<span class="sub">
+				>{flowEdge
+					? fmtDirectional(flowEdge.revVal, !flowEdge.reverseMissing)
+					: '—'}{#if flowEdge?.revCount != null}<span class="sub">
 						· {flowEdge.revCount.toLocaleString()} obs</span
 					>{/if}</span
 			>
@@ -179,7 +192,11 @@
 		<div class="value-row total">
 			<span class="value-label">total</span>
 			<span class="value"
-				>{fmt(flowEdge?.total)}{#if flowEdge?.reverseMissing && flowMinWeight > 0}<span class="sub">
+				>{fmt(
+					flowEdge?.total
+				)}{#if (flowEdge?.forwardMissing || flowEdge?.reverseMissing) && flowMinWeight > 0}<span
+						class="sub"
+					>
 						(partial)</span
 					>{/if}</span
 			>
