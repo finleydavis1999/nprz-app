@@ -54,6 +54,32 @@
 			net: (forward?.value ?? 0) - (reverse?.value ?? 0)
 		};
 	});
+	// Inline directional pie: a small two-slice circle showing the o->d vs
+	// d->o split. Fixed radius (it encodes proportion, not magnitude). Returns
+	// the SVG path for the forward (o->d) slice; the reverse is the rest of
+	// the circle drawn as a full disc underneath.
+	const FLOW_PIE_R = 14;
+	function forwardSlicePath(edge) {
+		const total = edge.total;
+		if (total <= 0) return '';
+		const frac = edge.fwdVal / total;
+		const cx = FLOW_PIE_R + 1;
+		const cy = FLOW_PIE_R + 1;
+		const r = FLOW_PIE_R;
+		// Full circle if forward is everything.
+		if (frac >= 0.999) {
+			return `M ${cx - r} ${cy} a ${r} ${r} 0 1 0 ${r * 2} 0 a ${r} ${r} 0 1 0 ${-r * 2} 0 Z`;
+		}
+		if (frac <= 0.001) return '';
+		const startAngle = -Math.PI / 2;
+		const endAngle = startAngle + frac * Math.PI * 2;
+		const x1 = cx + r * Math.cos(startAngle);
+		const y1 = cy + r * Math.sin(startAngle);
+		const x2 = cx + r * Math.cos(endAngle);
+		const y2 = cy + r * Math.sin(endAngle);
+		const large = frac > 0.5 ? 1 : 0;
+		return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
+	}
 
 	// Reverse direction may have been filtered out by the min-weight slider.
 	// We can't show its true value (it's not in the filtered set), but we can
@@ -162,6 +188,37 @@
 			<span class="value-label">net ({oName})</span>
 			<span class="value">{fmt(flowEdge?.net)}</span>
 		</div>
+		{#if flowEdge && flowEdge.total > 0}
+			<div class="flow-pie-wrap">
+				<svg
+					width={(FLOW_PIE_R + 1) * 2}
+					height={(FLOW_PIE_R + 1) * 2}
+					viewBox="0 0 {(FLOW_PIE_R + 1) * 2} {(FLOW_PIE_R + 1) * 2}"
+					role="img"
+					aria-label="Directional split: {Math.round(
+						(flowEdge.fwdVal / flowEdge.total) * 100
+					)}% {oName} to {dName}"
+				>
+					<!-- Reverse (blue) as full disc underneath -->
+					<circle cx={FLOW_PIE_R + 1} cy={FLOW_PIE_R + 1} r={FLOW_PIE_R} fill="#1f77b4" />
+					<!-- Forward (red) slice on top -->
+					<path d={forwardSlicePath(flowEdge)} fill="#d62728" />
+					<circle
+						cx={FLOW_PIE_R + 1}
+						cy={FLOW_PIE_R + 1}
+						r={FLOW_PIE_R}
+						fill="none"
+						stroke="#fff"
+						stroke-width="1.5"
+					/>
+				</svg>
+				<span class="flow-pie-label">
+					{Math.round((flowEdge.fwdVal / flowEdge.total) * 100)}% / {Math.round(
+						(flowEdge.revVal / flowEdge.total) * 100
+					)}%
+				</span>
+			</div>
+		{/if}
 		{#if flowBreaks && flowValues.length}
 			<Histogram
 				values={flowValues}
@@ -240,6 +297,17 @@
 	.value-row.total {
 		border-top: 1px solid var(--color-line);
 		padding-top: 2px;
+	}
+	.flow-pie-wrap {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-2);
+		margin-top: var(--spacing-1);
+	}
+	.flow-pie-label {
+		font-size: var(--text-xs);
+		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
 	}
 	.divider {
 		border-top: 1px solid var(--color-line);
