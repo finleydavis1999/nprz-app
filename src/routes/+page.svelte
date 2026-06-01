@@ -780,11 +780,13 @@
 <DockToggleStrip />
 
 <MapLegend
-	node={{
-		breaks,
-		colors,
-		title: displayed.activeLayer?.name ?? 'Areas'
-	}}
+	node={selection.enabled
+		? {
+				breaks,
+				colors,
+				title: displayed.activeLayer?.name ?? 'Areas'
+			}
+		: null}
 	flow={flowsShown
 		? {
 				breaks: flowBreaks,
