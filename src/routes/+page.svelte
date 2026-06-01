@@ -302,14 +302,22 @@
 	// still render); the warning below the min-weight slider tells the user
 	// to raise the threshold if they want a different subset.
 	const FLOW_RENDER_CAP = 50_000;
-	const filteredFlowsAll = $derived(
-		effectiveFlowResult
-			? effectiveFlowResult.flows.filter(
-					(f) =>
-						Math.abs(f.value) >= flow.minWeight && (f.count == null || f.count >= flow.minCount)
-				)
-			: []
-	);
+	const filteredFlowsAll = $derived.by(() => {
+		if (!effectiveFlowResult) return [];
+		const studyIds = studyArea.ids;
+		const scoped = studyIds.size > 0;
+		const mode = flow.studyAreaMode;
+		return effectiveFlowResult.flows.filter((f) => {
+			if (Math.abs(f.value) < flow.minWeight) return false;
+			if (f.count != null && f.count < flow.minCount) return false;
+			if (scoped) {
+				const oIn = studyIds.has(f.o);
+				const dIn = studyIds.has(f.d);
+				if (mode === 'within' ? !(oIn && dIn) : !(oIn || dIn)) return false;
+			}
+			return true;
+		});
+	});
 	const flowsCapped = $derived(filteredFlowsAll.length > FLOW_RENDER_CAP);
 	const filteredFlows = $derived.by(() => {
 		if (!flowsCapped) return filteredFlowsAll;
@@ -498,27 +506,29 @@
 				{/key}
 			{/if}
 			{#if flowsShown && filteredFlows.length && flowBreaks && centroids}
-				<FlowLayer
-					sourceId="flow-{flow.dataset}-{flow.scale}"
-					flows={filteredFlows}
-					{centroids}
-					breaks={flowBreaks}
-					colors={flowColors}
-					widthMin={flowCartography.widthMin}
-					widthMax={flowCartography.widthMax}
-					opacity={flowCartography.opacity}
-					curvature={flowCartography.curvature}
-					selectedNode={ui.selectedFlowNode}
-					mode={ui.flowMode}
-				/>
-				{#if ui.selectedFlowNode}
-					<FlowPies
-						selectedNode={ui.selectedFlowNode}
+				{#key `${flow.dataset}-${flow.scale}`}
+					<FlowLayer
+						sourceId="flow-{flow.dataset}-{flow.scale}"
 						flows={filteredFlows}
 						{centroids}
-						scale={flow.scale}
+						breaks={flowBreaks}
+						colors={flowColors}
+						widthMin={flowCartography.widthMin}
+						widthMax={flowCartography.widthMax}
+						opacity={flowCartography.opacity}
+						curvature={flowCartography.curvature}
+						selectedNode={ui.selectedFlowNode}
+						mode={ui.flowMode}
 					/>
-				{/if}
+					{#if ui.selectedFlowNode}
+						<FlowPies
+							selectedNode={ui.selectedFlowNode}
+							flows={filteredFlows}
+							{centroids}
+							scale={flow.scale}
+						/>
+					{/if}
+				{/key}
 			{/if}
 			<InspectInteraction
 				nodeFillLayerId="choropleth-{selection.scale}-fill"
@@ -655,6 +665,33 @@
 				<Field label="Self-loops">
 					<input type="checkbox" bind:checked={flow.includeSelfLoops} />
 				</Field>
+				{#if studyArea.ids.size > 0}
+					<Field
+						label="Study area"
+						info="Filter flows by the active lasso. Within: both origin and destination must be inside. Touches: either side inside."
+					>
+						<div class="seg" role="radiogroup" aria-label="Study area mode">
+							<button
+								type="button"
+								class:active={flow.studyAreaMode === 'within'}
+								aria-pressed={flow.studyAreaMode === 'within'}
+								onclick={() => (flow.studyAreaMode = 'within')}
+								title="Keep OD pairs where BOTH origin and destination are in the study area"
+							>
+								entirely within
+							</button>
+							<button
+								type="button"
+								class:active={flow.studyAreaMode === 'touches'}
+								aria-pressed={flow.studyAreaMode === 'touches'}
+								onclick={() => (flow.studyAreaMode = 'touches')}
+								title="Keep OD pairs where EITHER side is in the study area"
+							>
+								origin OR destination within
+							</button>
+						</div>
+					</Field>
+				{/if}
 				<div class="save-divider"></div>
 				<SaveFlowLayerInput {manifest} />
 			</div>
@@ -743,11 +780,13 @@
 <DockToggleStrip />
 
 <MapLegend
-	node={{
-		breaks,
-		colors,
-		title: displayed.activeLayer?.name ?? 'Areas'
-	}}
+	node={selection.enabled
+		? {
+				breaks,
+				colors,
+				title: displayed.activeLayer?.name ?? 'Areas'
+			}
+		: null}
 	flow={flowsShown
 		? {
 				breaks: flowBreaks,
@@ -887,5 +926,26 @@
 		font-variant-numeric: tabular-nums;
 		border-radius: var(--radius);
 		pointer-events: none;
+	}
+	.seg {
+		display: inline-flex;
+		border: 1px solid var(--color-line);
+		border-radius: var(--radius);
+		overflow: hidden;
+	}
+	.seg button {
+		background: transparent;
+		border: none;
+		padding: 2px var(--spacing-2);
+		font-size: var(--text-xs);
+		color: var(--color-muted);
+		cursor: pointer;
+	}
+	.seg button + button {
+		border-left: 1px solid var(--color-line);
+	}
+	.seg button.active {
+		background: var(--color-accent);
+		color: var(--color-accent-fg);
 	}
 </style>

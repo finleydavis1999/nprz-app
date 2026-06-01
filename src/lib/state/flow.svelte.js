@@ -30,7 +30,12 @@ const DEFAULTS = Object.freeze({
 	// dropping every negative value. Updates do not re-query DuckDB.
 	minWeight: 0,
 	minCount: 0,
-	includeSelfLoops: false
+	includeSelfLoops: false,
+	/** Filter mode applied when a study area is active. 'within' keeps OD
+	 *  pairs where both o and d are in the lasso; 'touches' keeps pairs where
+	 *  either side is. Mirrors the SIM model spec field. No "enabled" boolean
+	 *  — the lasso being drawn is itself the toggle. */
+	studyAreaMode: 'within'
 });
 
 const CARTO_DEFAULTS = Object.freeze({
@@ -55,6 +60,7 @@ class FlowState {
 	minWeight = $state(DEFAULTS.minWeight);
 	minCount = $state(DEFAULTS.minCount);
 	includeSelfLoops = $state(DEFAULTS.includeSelfLoops);
+	studyAreaMode = $state(DEFAULTS.studyAreaMode);
 
 	load() {
 		if (typeof localStorage === 'undefined') return;
@@ -71,6 +77,9 @@ class FlowState {
 			if (Number.isFinite(p?.minWeight)) this.minWeight = p.minWeight;
 			if (Number.isFinite(p?.minCount)) this.minCount = p.minCount;
 			if (typeof p?.includeSelfLoops === 'boolean') this.includeSelfLoops = p.includeSelfLoops;
+			if (p?.studyAreaMode === 'within' || p?.studyAreaMode === 'touches') {
+				this.studyAreaMode = p.studyAreaMode;
+			}
 		} catch {
 			// corrupted storage — ignore
 		}
@@ -90,7 +99,8 @@ class FlowState {
 					filters: this.filters,
 					minWeight: this.minWeight,
 					minCount: this.minCount,
-					includeSelfLoops: this.includeSelfLoops
+					includeSelfLoops: this.includeSelfLoops,
+					studyAreaMode: this.studyAreaMode
 				})
 			);
 		} catch {

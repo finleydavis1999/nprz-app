@@ -36,11 +36,14 @@
 			container,
 			style,
 			center: mapView.center,
-			zoom: mapView.zoom
+			zoom: mapView.zoom,
+			dragRotate: false,
+			touchPitch: false,
+			pitchWithRotate: false
 		});
 		// Expose for e2e tests; harmless in production.
 		if (typeof window !== 'undefined') window.__map = map;
-		map.addControl(new maplibregl.NavigationControl(), 'top-right');
+		map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 		// Bottom-right scale bar — bottom-left is reserved for the dock
 		// toggle strip and would intercept clicks on its controls.
 		map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-right');

@@ -114,21 +114,21 @@
 		<p class="hint">No saved layers yet — configure below and click <strong>Save layer</strong>.</p>
 	{:else}
 		<ul class="layers">
-			{#if domain !== 'flow'}
-				<li class="layer live" class:active={layers.activeId === null}>
-					<button
-						type="button"
-						class="radio"
-						aria-pressed={layers.activeId === null}
-						onclick={() => layers.setActive(null)}
-						title="Show live selection"
-					>
-						{layers.activeId === null ? '●' : '○'}
-					</button>
-					<span class="kind" title="Live selection">·</span>
-					<span class="name muted">live selection</span>
-				</li>
-			{/if}
+			<li class="layer live" class:active={layers.activeId === null}>
+				<button
+					type="button"
+					class="radio"
+					aria-pressed={layers.activeId === null}
+					onclick={() => layers.setActive(null)}
+					title={domain === 'flow' ? 'Show live flow query' : 'Show live selection'}
+				>
+					{layers.activeId === null ? '●' : '○'}
+				</button>
+				<span class="kind" title="Live selection">·</span>
+				<span class="name muted">
+					{domain === 'flow' ? 'live flow query' : 'live selection'}
+				</span>
+			</li>
 			{#each visibleItems as layer (layer.id)}
 				{@const isOff = !activatable(layer)}
 				{@const offReason =
