@@ -81,7 +81,12 @@ class FlowState {
 			if (Number.isFinite(p?.minWeight)) this.minWeight = p.minWeight;
 			if (Number.isFinite(p?.minCount)) this.minCount = p.minCount;
 			if (typeof p?.includeSelfLoops === 'boolean') this.includeSelfLoops = p.includeSelfLoops;
-			if (p?.studyAreaMode === 'within' || p?.studyAreaMode === 'touches') {
+			if (
+				p?.studyAreaMode === 'within' ||
+				p?.studyAreaMode === 'origin-in' ||
+				p?.studyAreaMode === 'dest-in' ||
+				p?.studyAreaMode === 'touches'
+			) {
 				this.studyAreaMode = p.studyAreaMode;
 			}
 		} catch {

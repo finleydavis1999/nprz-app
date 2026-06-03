@@ -314,7 +314,23 @@
 			if (scoped) {
 				const oIn = studyIds.has(f.o);
 				const dIn = studyIds.has(f.d);
-				if (mode === 'within' ? !(oIn && dIn) : !(oIn || dIn)) return false;
+				switch (mode) {
+					case 'within':
+						if (!(oIn && dIn)) return false;
+						break;
+					case 'origin-in':
+						if (!oIn) return false;
+						break;
+					case 'dest-in':
+						if (!dIn) return false;
+						break;
+					case 'touches':
+						if (!(oIn || dIn)) return false;
+						break;
+					default:
+						if (!(oIn && dIn)) return false;
+						break;
+				}
 			}
 			return true;
 		});
@@ -364,7 +380,7 @@
 		}
 		return out;
 	});
-	const flowsCapped = $derived(filteredFlowsAll.length > FLOW_RENDER_CAP);
+	const flowsCapped = $derived.by(() => filteredFlowsAll.length > FLOW_RENDER_CAP);
 	const filteredFlows = $derived.by(() => {
 		if (!flowsCapped) return filteredFlowsAll;
 		// Top-N by value — sort descending and slice.
@@ -744,28 +760,39 @@
 					<input type="checkbox" bind:checked={flow.includeSelfLoops} />
 				</Field>
 				{#if studyArea.ids.size > 0}
-					<Field
-						label="Study area"
-						info="Filter flows by the active lasso. Within: both origin and destination must be inside. Touches: either side inside."
-					>
-						<div class="seg" role="radiogroup" aria-label="Study area mode">
+					<Field label="Study area">
+						<div class="study-area-grid" role="radiogroup" aria-label="Study area mode">
 							<button
 								type="button"
 								class:active={flow.studyAreaMode === 'within'}
 								aria-pressed={flow.studyAreaMode === 'within'}
 								onclick={() => (flow.studyAreaMode = 'within')}
-								title="Keep OD pairs where BOTH origin and destination are in the study area"
 							>
-								entirely within
+								Entirely within
 							</button>
 							<button
 								type="button"
 								class:active={flow.studyAreaMode === 'touches'}
 								aria-pressed={flow.studyAreaMode === 'touches'}
 								onclick={() => (flow.studyAreaMode = 'touches')}
-								title="Keep OD pairs where EITHER side is in the study area"
 							>
-								origin OR destination within
+								O or D within
+							</button>
+							<button
+								type="button"
+								class:active={flow.studyAreaMode === 'origin-in'}
+								aria-pressed={flow.studyAreaMode === 'origin-in'}
+								onclick={() => (flow.studyAreaMode = 'origin-in')}
+							>
+								Origin within
+							</button>
+							<button
+								type="button"
+								class:active={flow.studyAreaMode === 'dest-in'}
+								aria-pressed={flow.studyAreaMode === 'dest-in'}
+								onclick={() => (flow.studyAreaMode = 'dest-in')}
+							>
+								Destination within
 							</button>
 						</div>
 					</Field>
@@ -1027,5 +1054,26 @@
 	.seg button.active {
 		background: var(--color-accent);
 		color: var(--color-accent-fg);
+	}
+	.study-area-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 4px;
+		width: 100%;
+	}
+	.study-area-grid button {
+		background: transparent;
+		border: 1px solid var(--color-line);
+		border-radius: var(--radius);
+		padding: 4px var(--spacing-2);
+		font-size: var(--text-xs);
+		color: var(--color-muted);
+		cursor: pointer;
+		text-align: center;
+	}
+	.study-area-grid button.active {
+		background: var(--color-accent);
+		color: var(--color-accent-fg);
+		border-color: var(--color-accent);
 	}
 </style>
