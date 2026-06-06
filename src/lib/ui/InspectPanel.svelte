@@ -1,9 +1,13 @@
 <script>
 	import Histogram from '$lib/cartography/Histogram.svelte';
 	import Field from './Field.svelte';
+	import SegmentedControl from './SegmentedControl.svelte';
 	import { ui } from '$lib/state/ui.svelte.js';
 	import { geoNames } from '$lib/state/geo-names.svelte.js';
 	import { scaleLabel } from '$lib/scales.js';
+	import { INFLOW, OUTFLOW } from '$lib/map/flow-colors.js';
+	import { pieSlicePath } from '$lib/map/pie.js';
+	import { fmtFlowMaybeBelow } from '$lib/flow-format.js';
 
 	let {
 		nodeValueByArea = new Map(),
@@ -17,7 +21,8 @@
 		flowsByPair = new Map(),
 		flowValues = [],
 		flowBreaks = null,
-		flowColors = []
+		flowColors = [],
+		flowMinWeight = 0
 	} = $props();
 
 	// Pinned (clicked) wins over hovered for the displayed target — so once a
@@ -40,8 +45,39 @@
 
 	const flowEdge = $derived.by(() => {
 		if (target?.kind !== 'flow') return null;
-		return flowsByPair.get(`${target.o}|${target.d}`) ?? null;
+		const forward = flowsByPair.get(`${target.o}|${target.d}`) ?? null;
+		const reverse = flowsByPair.get(`${target.d}|${target.o}`) ?? null;
+		if (!forward && !reverse) return null;
+		return {
+			fwdVal: forward?.value ?? 0,
+			revVal: reverse?.value ?? 0,
+			fwdCount: forward?.count ?? null,
+			revCount: reverse?.count ?? null,
+			reverseMissing: !reverse,
+			total: (forward?.value ?? 0) + (reverse?.value ?? 0),
+			net: (forward?.value ?? 0) - (reverse?.value ?? 0)
+		};
 	});
+	// Inline directional pie: a small two-slice circle showing the o->d vs d->o
+	// split. Fixed radius (it encodes proportion, not magnitude). The forward
+	// (o->d, red) slice is drawn on top of a full reverse (d->o, blue) disc.
+	const FLOW_PIE_R = 14;
+	const FLOW_PIE_C = FLOW_PIE_R + 1; // center / padding for the 1.5px stroke
+	function forwardSlicePath(edge) {
+		const frac = edge.total > 0 ? edge.fwdVal / edge.total : 0;
+		return pieSlicePath(
+			FLOW_PIE_C,
+			FLOW_PIE_C,
+			FLOW_PIE_R,
+			-Math.PI / 2,
+			-Math.PI / 2 + frac * Math.PI * 2
+		);
+	}
+
+	// Reverse direction may have been filtered out by the min-weight slider —
+	// show "< {min}" rather than claiming it's zero. See fmtFlowMaybeBelow.
+	const fmtReverse = (edge) =>
+		fmtFlowMaybeBelow(edge.revVal, edge.reverseMissing, flowMinWeight, fmt);
 </script>
 
 <div class="inspect">
@@ -77,32 +113,16 @@
 			<div class="divider"></div>
 			<div class="meta">Flows touching this node</div>
 			<Field label="Show">
-				<div class="seg" role="radiogroup" aria-label="Flow direction">
-					<button
-						type="button"
-						class:active={ui.flowMode === 'in'}
-						aria-pressed={ui.flowMode === 'in'}
-						onclick={() => (ui.flowMode = 'in')}
-					>
-						In
-					</button>
-					<button
-						type="button"
-						class:active={ui.flowMode === 'out'}
-						aria-pressed={ui.flowMode === 'out'}
-						onclick={() => (ui.flowMode = 'out')}
-					>
-						Out
-					</button>
-					<button
-						type="button"
-						class:active={ui.flowMode === 'unified'}
-						aria-pressed={ui.flowMode === 'unified'}
-						onclick={() => (ui.flowMode = 'unified')}
-					>
-						Unified
-					</button>
-				</div>
+				<SegmentedControl
+					ariaLabel="Flow direction"
+					value={ui.flowMode}
+					onChange={(v) => (ui.flowMode = v)}
+					options={[
+						{ value: 'in', label: 'In' },
+						{ value: 'out', label: 'Out' },
+						{ value: 'unified', label: 'Unified' }
+					]}
+				/>
 			</Field>
 		{/if}
 	{:else}
@@ -114,13 +134,58 @@
 			{#if pinned}<span class="pin">📌</span>{/if}
 		</div>
 		<div class="value-row">
-			<span class="value-label">value</span>
-			<span class="value">{fmt(flowEdge?.value)}</span>
+			<span class="value-label" style:color={OUTFLOW}>{oName} → {dName}</span>
+			<span class="value"
+				>{fmt(flowEdge?.fwdVal)}{#if flowEdge?.fwdCount != null}<span class="sub">
+						· {flowEdge.fwdCount.toLocaleString()} obs</span
+					>{/if}</span
+			>
 		</div>
-		{#if flowEdge?.count != null}
-			<div class="value-row">
-				<span class="value-label">count</span>
-				<span class="value">{flowEdge.count.toLocaleString()}</span>
+		<div class="value-row">
+			<span class="value-label" style:color={INFLOW}>{dName} → {oName}</span>
+			<span class="value"
+				>{flowEdge ? fmtReverse(flowEdge) : '—'}{#if flowEdge?.revCount != null}<span class="sub">
+						· {flowEdge.revCount.toLocaleString()} obs</span
+					>{/if}</span
+			>
+		</div>
+		<div class="value-row total">
+			<span class="value-label">total</span>
+			<span class="value"
+				>{fmt(flowEdge?.total)}{#if flowEdge?.reverseMissing && flowMinWeight > 0}<span class="sub">
+						(partial)</span
+					>{/if}</span
+			>
+		</div>
+		<div class="value-row">
+			<span class="value-label" title="Forward (o→d) minus reverse (d→o)">net ({oName})</span>
+			<span class="value">{fmt(flowEdge?.net)}</span>
+		</div>
+		{#if flowEdge && flowEdge.total > 0}
+			{@const fwdPct = Math.round((flowEdge.fwdVal / flowEdge.total) * 100)}
+			{@const dim = FLOW_PIE_C * 2}
+			<div class="flow-pie-wrap">
+				<svg
+					width={dim}
+					height={dim}
+					viewBox="0 0 {dim} {dim}"
+					role="img"
+					aria-label="Directional split: {fwdPct}% {oName} to {dName}"
+				>
+					<!-- Reverse (blue) as full disc underneath -->
+					<circle cx={FLOW_PIE_C} cy={FLOW_PIE_C} r={FLOW_PIE_R} fill={INFLOW} />
+					<!-- Forward (red) slice on top -->
+					<path d={forwardSlicePath(flowEdge)} fill={OUTFLOW} />
+					<circle
+						cx={FLOW_PIE_C}
+						cy={FLOW_PIE_C}
+						r={FLOW_PIE_R}
+						fill="none"
+						stroke="#fff"
+						stroke-width="1.5"
+					/>
+				</svg>
+				<span class="flow-pie-label">{fwdPct}% / {100 - fwdPct}%</span>
 			</div>
 		{/if}
 		{#if flowBreaks && flowValues.length}
@@ -128,7 +193,7 @@
 				values={flowValues}
 				breaks={flowBreaks}
 				colors={flowColors}
-				highlightValue={flowEdge?.value ?? null}
+				highlightValue={flowEdge?.fwdVal ?? null}
 			/>
 		{/if}
 	{/if}
@@ -193,6 +258,26 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
+	.sub {
+		font-size: var(--text-xs);
+		color: var(--color-muted);
+		font-weight: 400;
+	}
+	.value-row.total {
+		border-top: 1px solid var(--color-line);
+		padding-top: 2px;
+	}
+	.flow-pie-wrap {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-2);
+		margin-top: var(--spacing-1);
+	}
+	.flow-pie-label {
+		font-size: var(--text-xs);
+		color: var(--color-muted);
+		font-variant-numeric: tabular-nums;
+	}
 	.divider {
 		border-top: 1px solid var(--color-line);
 		margin-top: var(--spacing-1);
@@ -201,26 +286,5 @@
 		color: var(--color-hint);
 		font-size: var(--text-sm);
 		margin: 0;
-	}
-	.seg {
-		display: inline-flex;
-		border: 1px solid var(--color-line);
-		border-radius: var(--radius);
-		overflow: hidden;
-	}
-	.seg button {
-		background: transparent;
-		border: none;
-		padding: 2px var(--spacing-2);
-		font-size: var(--text-xs);
-		color: var(--color-muted);
-		cursor: pointer;
-	}
-	.seg button + button {
-		border-left: 1px solid var(--color-line);
-	}
-	.seg button.active {
-		background: var(--color-accent);
-		color: var(--color-accent-fg);
 	}
 </style>

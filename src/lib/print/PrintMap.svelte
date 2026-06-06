@@ -3,6 +3,8 @@
 	import { geoPath } from 'd3-geo';
 	import { rdProjection } from './projection.js';
 	import { bezierLine } from '$lib/cartography/curve.js';
+	import { INFLOW, OUTFLOW } from '$lib/map/flow-colors.js';
+	import { pieSlicePath } from '$lib/map/pie.js';
 
 	/**
 	 * @typedef {Object} FlowFeat
@@ -319,21 +321,6 @@
 		const a = total / max;
 		return Math.sqrt(a) * (maxR - minR) + minR;
 	}
-
-	function pieSlicePath(cx, cy, r, startAngle, endAngle) {
-		if (endAngle - startAngle >= Math.PI * 2 - 1e-6) {
-			return `M ${cx - r} ${cy} a ${r} ${r} 0 1 0 ${r * 2} 0 a ${r} ${r} 0 1 0 ${-r * 2} 0 Z`;
-		}
-		const x1 = cx + r * Math.cos(startAngle);
-		const y1 = cy + r * Math.sin(startAngle);
-		const x2 = cx + r * Math.cos(endAngle);
-		const y2 = cy + r * Math.sin(endAngle);
-		const large = endAngle - startAngle > Math.PI ? 1 : 0;
-		return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
-	}
-
-	const INFLOW = '#1f77b4';
-	const OUTFLOW = '#d62728';
 </script>
 
 {#if topoError}
