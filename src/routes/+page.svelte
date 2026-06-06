@@ -29,6 +29,7 @@
 	import ModelDock from '$lib/ui/ModelDock.svelte';
 	import ModelResults from '$lib/ui/ModelResults.svelte';
 	import SavedLayers from '$lib/ui/SavedLayers.svelte';
+	import SegmentedControl from '$lib/ui/SegmentedControl.svelte';
 	import FloatingDock from '$lib/ui/FloatingDock.svelte';
 	import DockToggleStrip from '$lib/ui/DockToggleStrip.svelte';
 	import InspectPanel from '$lib/ui/InspectPanel.svelte';
@@ -506,6 +507,11 @@
 				{/key}
 			{/if}
 			{#if flowsShown && filteredFlows.length && flowBreaks && centroids}
+				<!-- Remount FlowLayer when the dataset/scale (and thus sourceId)
+				     changes: FlowLayer only creates its MapLibre source + layers in
+				     onMount keyed off sourceId, so without a fresh mount a switch
+				     would leave the new source uncreated. Pairs with FlowLayer's own
+				     getLayer guards, which suppress the transient style error. -->
 				{#key `${flow.dataset}-${flow.scale}`}
 					<FlowLayer
 						sourceId="flow-{flow.dataset}-{flow.scale}"
@@ -526,6 +532,7 @@
 							flows={filteredFlows}
 							{centroids}
 							scale={flow.scale}
+							minWeight={flow.minWeight}
 						/>
 					{/if}
 				{/key}
@@ -670,26 +677,23 @@
 						label="Study area"
 						info="Filter flows by the active lasso. Within: both origin and destination must be inside. Touches: either side inside."
 					>
-						<div class="seg" role="radiogroup" aria-label="Study area mode">
-							<button
-								type="button"
-								class:active={flow.studyAreaMode === 'within'}
-								aria-pressed={flow.studyAreaMode === 'within'}
-								onclick={() => (flow.studyAreaMode = 'within')}
-								title="Keep OD pairs where BOTH origin and destination are in the study area"
-							>
-								entirely within
-							</button>
-							<button
-								type="button"
-								class:active={flow.studyAreaMode === 'touches'}
-								aria-pressed={flow.studyAreaMode === 'touches'}
-								onclick={() => (flow.studyAreaMode = 'touches')}
-								title="Keep OD pairs where EITHER side is in the study area"
-							>
-								origin OR destination within
-							</button>
-						</div>
+						<SegmentedControl
+							ariaLabel="Study area mode"
+							value={flow.studyAreaMode}
+							onChange={(v) => (flow.studyAreaMode = v)}
+							options={[
+								{
+									value: 'within',
+									label: 'entirely within',
+									title: 'Keep OD pairs where BOTH origin and destination are in the study area'
+								},
+								{
+									value: 'touches',
+									label: 'origin OR destination within',
+									title: 'Keep OD pairs where EITHER side is in the study area'
+								}
+							]}
+						/>
 					</Field>
 				{/if}
 				<div class="save-divider"></div>
@@ -720,6 +724,7 @@
 			{flowValues}
 			{flowBreaks}
 			{flowColors}
+			flowMinWeight={flow.minWeight}
 		/>
 	</Panel>
 
@@ -926,26 +931,5 @@
 		font-variant-numeric: tabular-nums;
 		border-radius: var(--radius);
 		pointer-events: none;
-	}
-	.seg {
-		display: inline-flex;
-		border: 1px solid var(--color-line);
-		border-radius: var(--radius);
-		overflow: hidden;
-	}
-	.seg button {
-		background: transparent;
-		border: none;
-		padding: 2px var(--spacing-2);
-		font-size: var(--text-xs);
-		color: var(--color-muted);
-		cursor: pointer;
-	}
-	.seg button + button {
-		border-left: 1px solid var(--color-line);
-	}
-	.seg button.active {
-		background: var(--color-accent);
-		color: var(--color-accent-fg);
 	}
 </style>

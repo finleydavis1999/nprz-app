@@ -9,6 +9,9 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { getMapContext } from './context.js';
 	import { geoNames } from '$lib/state/geo-names.svelte.js';
+	import { INFLOW, OUTFLOW } from './flow-colors.js';
+	import { pieSlicePath } from './pie.js';
+	import { fmtFlowMaybeBelow } from '$lib/flow-format.js';
 
 	let {
 		selectedNode,
@@ -17,8 +20,9 @@
 		scale = 'gem',
 		maxRadius = 26,
 		minRadius = 4,
-		inflowColor = '#1f77b4',
-		outflowColor = '#d62728'
+		inflowColor = INFLOW,
+		outflowColor = OUTFLOW,
+		minWeight = 0
 	} = $props();
 
 	const ctx = getMapContext();
@@ -98,6 +102,9 @@
 		if (Math.abs(v) >= 1) return v.toFixed(1);
 		return v.toFixed(2);
 	}
+	// Like fmt(), but a zero direction under an active min-weight filter is
+	// shown as "< {min}" (filtered below threshold) rather than a bare 0.
+	const fmtDir = (v) => fmtFlowMaybeBelow(v, v === 0, minWeight, fmt);
 
 	// Inline " · N obs" suffix for tooltip rows (weighted layers only).
 	function obsLabel(n) {
@@ -132,19 +139,6 @@
 		const a = total / pies.max;
 		const r = Math.sqrt(a) * (maxRadius - minRadius) + minRadius;
 		return r;
-	}
-
-	function pieSlicePath(cx, cy, r, startAngle, endAngle) {
-		// Full circle case — single arc would be degenerate.
-		if (endAngle - startAngle >= Math.PI * 2 - 1e-6) {
-			return `M ${cx - r} ${cy} a ${r} ${r} 0 1 0 ${r * 2} 0 a ${r} ${r} 0 1 0 ${-r * 2} 0 Z`;
-		}
-		const x1 = cx + r * Math.cos(startAngle);
-		const y1 = cy + r * Math.sin(startAngle);
-		const x2 = cx + r * Math.cos(endAngle);
-		const y2 = cy + r * Math.sin(endAngle);
-		const large = endAngle - startAngle > Math.PI ? 1 : 0;
-		return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
 	}
 
 	let handlers = null;
@@ -216,7 +210,9 @@
 							stroke-dasharray="3 2"
 						/>
 					{/if}
-					<text class="label" x={p.x + r + 4} y={p.y + 4}>{p.name}</text>
+					{#if p.primary || p.code === hoveredCode}
+						<text class="label" x={p.x + r + 4} y={p.y + 4}>{p.name}</text>
+					{/if}
 				</g>
 			{/each}
 		</svg>
@@ -230,25 +226,25 @@
 				<div class="tt-name">{hoveredItem.name}{hoveredItem.primary ? ' — selected' : ''}</div>
 				{#if hoveredItem.primary}
 					<div class="tt-row" style:color={inflowColor}>
-						Total inflow: {fmt(hoveredItem.inflow)}{#if hoveredItem.inCount > 0}<span
+						Total inflow: {fmtDir(hoveredItem.inflow)}{#if hoveredItem.inCount > 0}<span
 								class="tt-count">{obsLabel(hoveredItem.inCount)}</span
 							>{/if}
 					</div>
 					<div class="tt-row" style:color={outflowColor}>
-						Total outflow: {fmt(hoveredItem.outflow)}{#if hoveredItem.outCount > 0}<span
+						Total outflow: {fmtDir(hoveredItem.outflow)}{#if hoveredItem.outCount > 0}<span
 								class="tt-count">{obsLabel(hoveredItem.outCount)}</span
 							>{/if}
 					</div>
 				{:else}
 					<div class="tt-row" style:color={inflowColor}>
-						{selectedName} → {hoveredItem.name}: {fmt(
+						{selectedName} → {hoveredItem.name}: {fmtDir(
 							hoveredItem.inflow
 						)}{#if hoveredItem.inCount > 0}<span class="tt-count"
 								>{obsLabel(hoveredItem.inCount)}</span
 							>{/if}
 					</div>
 					<div class="tt-row" style:color={outflowColor}>
-						{hoveredItem.name} → {selectedName}: {fmt(
+						{hoveredItem.name} → {selectedName}: {fmtDir(
 							hoveredItem.outflow
 						)}{#if hoveredItem.outCount > 0}<span class="tt-count"
 								>{obsLabel(hoveredItem.outCount)}</span
