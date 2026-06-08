@@ -31,10 +31,11 @@ const DEFAULTS = Object.freeze({
 	minWeight: 0,
 	minCount: 0,
 	includeSelfLoops: false,
-	/** Filter mode applied when a study area is active. 'within' keeps OD
-	 *  pairs where both o and d are in the lasso; 'touches' keeps pairs where
-	 *  either side is. Mirrors the SIM model spec field. No "enabled" boolean
-	 *  — the lasso being drawn is itself the toggle. */
+	/** Filter mode applied when a study area is active. Four modes form a
+	 *  lattice from strictest to most inclusive: 'within' (both o and d in the
+	 *  lasso), 'origin-in' (origin in → outflows), 'dest-in' (destination in →
+	 *  inflows), 'touches' (either side in). Mirrors the SIM model spec field.
+	 *  No "enabled" boolean — the lasso being drawn is itself the toggle. */
 	studyAreaMode: 'within'
 });
 
@@ -47,7 +48,17 @@ const CARTO_DEFAULTS = Object.freeze({
 	widthMin: 0.5,
 	widthMax: 8,
 	opacity: 0.75,
-	curvature: 0.2
+	curvature: 0.2,
+	// Directional gradient mode: render one line per bidirectional pair,
+	// width by total flow, color as a red→blue gradient split at the
+	// directional proportion. Off = classic per-direction stepped lines.
+	directional: false,
+	// Show the balance-point dot at each bidirectional gradient split.
+	showBalance: true,
+	// Spider-view nodal circle radius bounds (px). Circles are area-scaled
+	// between these by flow magnitude.
+	pieMinRadius: 4,
+	pieMaxRadius: 26
 });
 
 class FlowState {
@@ -77,7 +88,12 @@ class FlowState {
 			if (Number.isFinite(p?.minWeight)) this.minWeight = p.minWeight;
 			if (Number.isFinite(p?.minCount)) this.minCount = p.minCount;
 			if (typeof p?.includeSelfLoops === 'boolean') this.includeSelfLoops = p.includeSelfLoops;
-			if (p?.studyAreaMode === 'within' || p?.studyAreaMode === 'touches') {
+			if (
+				p?.studyAreaMode === 'within' ||
+				p?.studyAreaMode === 'origin-in' ||
+				p?.studyAreaMode === 'dest-in' ||
+				p?.studyAreaMode === 'touches'
+			) {
 				this.studyAreaMode = p.studyAreaMode;
 			}
 		} catch {
@@ -129,6 +145,10 @@ class FlowCartographyState {
 	widthMax = $state(CARTO_DEFAULTS.widthMax);
 	opacity = $state(CARTO_DEFAULTS.opacity);
 	curvature = $state(CARTO_DEFAULTS.curvature);
+	directional = $state(CARTO_DEFAULTS.directional);
+	showBalance = $state(CARTO_DEFAULTS.showBalance);
+	pieMinRadius = $state(CARTO_DEFAULTS.pieMinRadius);
+	pieMaxRadius = $state(CARTO_DEFAULTS.pieMaxRadius);
 
 	reset() {
 		applyDefaults(this, CARTO_DEFAULTS);

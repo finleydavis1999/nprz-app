@@ -22,7 +22,10 @@
 		minRadius = 4,
 		inflowColor = INFLOW,
 		outflowColor = OUTFLOW,
-		minWeight = 0
+		minWeight = 0,
+		// 'unified' → two-slice in/out pie; 'in'/'out' → plain circle sized by
+		// that single direction.
+		flowMode = 'unified'
 	} = $props();
 
 	const ctx = getMapContext();
@@ -66,27 +69,31 @@
 			}
 		}
 		let max = 0;
-		/** @type {Array<{ code: string, inflow: number, outflow: number, inCount: number, outCount: number, total: number }>} */
+		/** @type {Array<{ code: string, inflow: number, outflow: number, inCount: number, outCount: number, total: number, magnitude: number }>} */
 		const items = [];
 		for (const [code, v] of m) {
 			const total = v.inflow + v.outflow;
-			if (total <= 0) continue;
-			if (total > max) max = total;
+			// `magnitude` is what drives the circle radius: a single direction in
+			// in/out mode, the combined total in unified mode.
+			const magnitude = flowMode === 'in' ? v.inflow : flowMode === 'out' ? v.outflow : total;
+			if (magnitude <= 0) continue;
+			if (magnitude > max) max = magnitude;
 			items.push({
 				code,
 				inflow: v.inflow,
 				outflow: v.outflow,
 				inCount: v.inCount,
 				outCount: v.outCount,
-				total
+				total,
+				magnitude
 			});
 		}
-		items.sort((a, b) => b.total - a.total);
+		items.sort((a, b) => b.magnitude - a.magnitude);
 		return { items, max };
 	});
 
 	let projected = $state(
-		/** @type {Array<{ code: string, x: number, y: number, inflow: number, outflow: number, inCount: number, outCount: number, total: number, name: string, primary: boolean }>} */ ([])
+		/** @type {Array<{ code: string, x: number, y: number, inflow: number, outflow: number, inCount: number, outCount: number, total: number, magnitude: number, name: string, primary: boolean }>} */ ([])
 	);
 
 	/** @type {string | null} */
@@ -171,7 +178,7 @@
 	<div class="overlay">
 		<svg class="pies" xmlns="http://www.w3.org/2000/svg">
 			{#each projected as p (p.code)}
-				{@const r = radiusFor(p.total)}
+				{@const r = radiusFor(p.magnitude)}
 				{@const inAngle = (p.inflow / p.total) * Math.PI * 2}
 				<g
 					class="pie"
@@ -184,7 +191,11 @@
 					role="img"
 					aria-label="{p.name}: in {fmt(p.inflow)}, out {fmt(p.outflow)}"
 				>
-					{#if p.inflow > 0 && p.outflow > 0}
+					{#if flowMode === 'in'}
+						<circle cx={p.x} cy={p.y} {r} fill={inflowColor} />
+					{:else if flowMode === 'out'}
+						<circle cx={p.x} cy={p.y} {r} fill={outflowColor} />
+					{:else if p.inflow > 0 && p.outflow > 0}
 						<path
 							d={pieSlicePath(p.x, p.y, r, -Math.PI / 2, -Math.PI / 2 + inAngle)}
 							fill={inflowColor}
@@ -217,7 +228,7 @@
 			{/each}
 		</svg>
 		{#if hoveredItem}
-			{@const r = radiusFor(hoveredItem.total)}
+			{@const r = radiusFor(hoveredItem.magnitude)}
 			<div
 				class="tooltip"
 				style:left="{hoveredItem.x + r + 8}px"
