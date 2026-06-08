@@ -293,8 +293,11 @@
 		const items = [];
 		for (const [code, v] of m) {
 			const total = v.inflow + v.outflow;
-			if (total <= 0) continue;
-			if (total > max) max = total;
+			// `magnitude` drives the radius: one direction in in/out mode, the
+			// combined total in unified mode (mirrors FlowPies.svelte).
+			const magnitude = flowMode === 'in' ? v.inflow : flowMode === 'out' ? v.outflow : total;
+			if (magnitude <= 0) continue;
+			if (magnitude > max) max = magnitude;
 			const c = centroids?.[code];
 			if (!c) continue;
 			const projected = projection(c);
@@ -304,13 +307,14 @@
 				inflow: v.inflow,
 				outflow: v.outflow,
 				total,
+				magnitude,
 				x: projected[0],
 				y: projected[1],
 				name: nameByCode?.get(code) ?? code,
 				primary: code === selectedFlowNode
 			});
 		}
-		items.sort((a, b) => b.total - a.total);
+		items.sort((a, b) => b.magnitude - a.magnitude);
 		return { items, max };
 	});
 
@@ -462,9 +466,13 @@
 		{#if pies.items.length > 0}
 			<g class="pies">
 				{#each pies.items as p (p.code)}
-					{@const r = pieRadius(p.total, pies.max)}
+					{@const r = pieRadius(p.magnitude, pies.max)}
 					{@const inAngle = (p.inflow / p.total) * Math.PI * 2}
-					{#if p.inflow > 0 && p.outflow > 0}
+					{#if flowMode === 'in'}
+						<circle cx={p.x} cy={p.y} {r} fill={INFLOW} />
+					{:else if flowMode === 'out'}
+						<circle cx={p.x} cy={p.y} {r} fill={OUTFLOW} />
+					{:else if p.inflow > 0 && p.outflow > 0}
 						<path
 							d={pieSlicePath(p.x, p.y, r, -Math.PI / 2, -Math.PI / 2 + inAngle)}
 							fill={INFLOW}

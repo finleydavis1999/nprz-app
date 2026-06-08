@@ -29,6 +29,7 @@
 	const hasWidth = $derived('widthMin' in target && 'widthMax' in target);
 	const hasOpacity = $derived('opacity' in target);
 	const hasCurvature = $derived('curvature' in target);
+	const hasPie = $derived('pieMinRadius' in target && 'pieMaxRadius' in target);
 	const hasDiverging = $derived('divergingPalette' in target && 'forceSequential' in target);
 
 	// One-knob palette: read + write the field that matches the current
@@ -113,6 +114,24 @@
 	{#if hasCurvature}
 		<Field label="Curvature" value={target.curvature.toFixed(2)}>
 			<input type="range" min="0" max="0.6" step="0.02" bind:value={target.curvature} />
+		</Field>
+	{/if}
+
+	{#if hasPie}
+		<Field
+			label="Circle min"
+			value="{target.pieMinRadius.toFixed(0)}px"
+			info="Smallest nodal-circle radius in the single-node spider view."
+		>
+			<input type="range" min="2" max="12" step="1" bind:value={target.pieMinRadius} />
+		</Field>
+
+		<Field
+			label="Circle max"
+			value="{target.pieMaxRadius.toFixed(0)}px"
+			info="Largest nodal-circle radius in the single-node spider view."
+		>
+			<input type="range" min="10" max="48" step="1" bind:value={target.pieMaxRadius} />
 		</Field>
 	{/if}
 </div>

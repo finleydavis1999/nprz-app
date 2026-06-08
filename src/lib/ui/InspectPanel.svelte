@@ -7,7 +7,6 @@
 	import { scaleLabel } from '$lib/scales.js';
 	import { INFLOW, OUTFLOW } from '$lib/map/flow-colors.js';
 	import { pieSlicePath } from '$lib/map/pie.js';
-	import { fmtFlowMaybeBelow } from '$lib/flow-format.js';
 
 	let {
 		nodeValueByArea = new Map(),
@@ -53,6 +52,13 @@
 			revVal: reverse?.value ?? 0,
 			fwdCount: forward?.count ?? null,
 			revCount: reverse?.count ?? null,
+			// Either direction can be the one filtered out by the min-weight
+			// slider. In classic mode you click a rendered line (so the forward
+			// always survived), but in directional mode the feature's o/d are the
+			// canonical pair orientation — the clicked "forward" may be the
+			// filtered-out weak direction. So track both presences and label
+			// both honestly.
+			forwardMissing: !forward,
 			reverseMissing: !reverse,
 			total: (forward?.value ?? 0) + (reverse?.value ?? 0),
 			net: (forward?.value ?? 0) - (reverse?.value ?? 0)
@@ -74,10 +80,15 @@
 		);
 	}
 
-	// Reverse direction may have been filtered out by the min-weight slider —
-	// show "< {min}" rather than claiming it's zero. See fmtFlowMaybeBelow.
-	const fmtReverse = (edge) =>
-		fmtFlowMaybeBelow(edge.revVal, edge.reverseMissing, flowMinWeight, fmt);
+	// A direction's value is honest as-is when present. When absent it was
+	// filtered below the min-weight threshold (not genuinely zero) — so show
+	// "< {threshold}" rather than "0.000". minWeight === 0 is the only case
+	// where a missing direction is truly zero. Applies to BOTH directions
+	// because in directional mode either can be the filtered one.
+	function fmtDirectional(val, present) {
+		if (present) return fmt(val);
+		return flowMinWeight > 0 ? `< ${fmt(flowMinWeight)}` : '0';
+	}
 </script>
 
 <div class="inspect">
@@ -136,7 +147,9 @@
 		<div class="value-row">
 			<span class="value-label" style:color={OUTFLOW}>{oName} → {dName}</span>
 			<span class="value"
-				>{fmt(flowEdge?.fwdVal)}{#if flowEdge?.fwdCount != null}<span class="sub">
+				>{flowEdge
+					? fmtDirectional(flowEdge.fwdVal, !flowEdge.forwardMissing)
+					: '—'}{#if flowEdge?.fwdCount != null}<span class="sub">
 						· {flowEdge.fwdCount.toLocaleString()} obs</span
 					>{/if}</span
 			>
@@ -144,7 +157,9 @@
 		<div class="value-row">
 			<span class="value-label" style:color={INFLOW}>{dName} → {oName}</span>
 			<span class="value"
-				>{flowEdge ? fmtReverse(flowEdge) : '—'}{#if flowEdge?.revCount != null}<span class="sub">
+				>{flowEdge
+					? fmtDirectional(flowEdge.revVal, !flowEdge.reverseMissing)
+					: '—'}{#if flowEdge?.revCount != null}<span class="sub">
 						· {flowEdge.revCount.toLocaleString()} obs</span
 					>{/if}</span
 			>
@@ -152,7 +167,11 @@
 		<div class="value-row total">
 			<span class="value-label">total</span>
 			<span class="value"
-				>{fmt(flowEdge?.total)}{#if flowEdge?.reverseMissing && flowMinWeight > 0}<span class="sub">
+				>{fmt(
+					flowEdge?.total
+				)}{#if (flowEdge?.forwardMissing || flowEdge?.reverseMissing) && flowMinWeight > 0}<span
+						class="sub"
+					>
 						(partial)</span
 					>{/if}</span
 			>

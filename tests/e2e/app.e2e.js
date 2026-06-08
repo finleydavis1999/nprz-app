@@ -170,6 +170,188 @@ test.describe('app', () => {
 		await expect(page.locator('.status')).toHaveCount(1);
 	});
 
+	test('directional gradient mode swaps the classic flow layer for the paired layer', async ({
+		page
+	}) => {
+		const flowPanel = page.locator('details.panel', { hasText: 'Flow data' });
+		await flowPanel.locator('summary').click();
+		const enable = flowPanel
+			.locator('label.toggle', { hasText: 'Show flows' })
+			.locator('input[type="checkbox"]');
+		await enable.check();
+
+		// Classic layer renders first.
+		await page.waitForFunction(() => !!window.__map?.getLayer?.('flow-ovin-gem-line'), {
+			timeout: 15_000
+		});
+
+		// Flip on directional gradient in the Flow cartography panel.
+		const cartoPanel = page.locator('details.panel', { hasText: 'Flow cartography' });
+		await cartoPanel.locator('summary').click();
+		const directional = cartoPanel
+			.locator('label.toggle', { hasText: 'Directional gradient' })
+			.locator('input[type="checkbox"]');
+		await directional.check();
+
+		// The paired directional layer + source replace the classic one.
+		await page.waitForFunction(
+			() => {
+				const m = window.__map;
+				return (
+					!!m?.getSource?.('flow-directional-ovin-gem') &&
+					!!m?.getLayer?.('flow-directional-ovin-gem-line') &&
+					!m?.getLayer?.('flow-ovin-gem-line') &&
+					m.querySourceFeatures('flow-directional-ovin-gem').length > 0
+				);
+			},
+			{ timeout: 15_000 }
+		);
+
+		// The split is colored by magnitude (major=orange / minor=teal), not by
+		// the arbitrary canonical direction, and a balance-dot layer marks each
+		// gradient split.
+		const directionalShape = await page.evaluate(() => {
+			const m = window.__map;
+			const colorExpr = JSON.stringify(
+				m.getPaintProperty('flow-directional-ovin-gem-line', 'line-color')
+			);
+			const cks = [
+				...new Set(m.querySourceFeatures('flow-directional-ovin-gem').map((f) => f.properties.ck))
+			];
+			const balLayer = !!m.getLayer('flow-directional-ovin-gem-balance-dot');
+			const balFeats = m.querySourceFeatures('flow-directional-ovin-gem-balance');
+			return {
+				colorExpr,
+				cks,
+				balLayer,
+				balanceCount: balFeats.length,
+				balanceIsPoint: balFeats[0]?.geometry?.type ?? null
+			};
+		});
+		expect(directionalShape.colorExpr).toContain('#d95f02'); // major / orange
+		expect(directionalShape.colorExpr).toContain('#7570b3'); // minor / purple
+		expect(directionalShape.cks).toEqual(expect.arrayContaining(['major', 'minor']));
+		expect(directionalShape.balLayer).toBe(true);
+		expect(directionalShape.balanceCount).toBeGreaterThan(0);
+		expect(directionalShape.balanceIsPoint).toBe('Point');
+
+		// Toggling off restores the classic per-direction layer.
+		await directional.uncheck();
+		await page.waitForFunction(
+			() => {
+				const m = window.__map;
+				return (
+					!!m?.getLayer?.('flow-ovin-gem-line') && !m?.getLayer?.('flow-directional-ovin-gem-line')
+				);
+			},
+			{ timeout: 15_000 }
+		);
+
+		await enable.uncheck();
+		await expect(page.locator('.status')).toHaveCount(1);
+	});
+
+	test('spider view: in/out modes render plain circles, unified renders pies', async ({ page }) => {
+		const flowPanel = page.locator('details.panel', { hasText: 'Flow data' });
+		await flowPanel.locator('summary').click();
+		const enable = flowPanel
+			.locator('label.toggle', { hasText: 'Show flows' })
+			.locator('input[type="checkbox"]');
+		await enable.check();
+
+		await page.waitForFunction(
+			() =>
+				!!window.__map?.getLayer?.('flow-ovin-gem-line') &&
+				window.__map.querySourceFeatures('flow-ovin-gem').length > 0,
+			{ timeout: 15_000 }
+		);
+
+		// Select a node that actually has flows, to enter a non-empty spider view.
+		// Pan the busiest flow node to the map centre (the centre clears the
+		// overlaying sidebars and reliably registers a click), and hide the flow
+		// lines so the click lands on the node polygon, not a line.
+		const target = await page.evaluate(() => {
+			const m = window.__map;
+			const flowFeats = m.querySourceFeatures('flow-ovin-gem');
+			if (!flowFeats.length) return null;
+			const count = new Map();
+			const coordOf = new Map();
+			for (const f of flowFeats) {
+				const { o, d } = f.properties;
+				const cs = f.geometry?.coordinates;
+				if (!cs || cs.length < 2) continue;
+				count.set(o, (count.get(o) ?? 0) + 1);
+				count.set(d, (count.get(d) ?? 0) + 1);
+				if (!coordOf.has(o)) coordOf.set(o, cs[0]);
+				if (!coordOf.has(d)) coordOf.set(d, cs[cs.length - 1]);
+			}
+			let best = null;
+			let bestN = 0;
+			for (const [code, n] of count) {
+				if (n > bestN) {
+					bestN = n;
+					best = code;
+				}
+			}
+			if (!best) return null;
+			for (const id of ['flow-ovin-gem-line', 'flow-ovin-gem-casing']) {
+				if (m.getLayer(id)) m.setLayoutProperty(id, 'visibility', 'none');
+			}
+			m.jumpTo({ center: coordOf.get(best) });
+			return best;
+		});
+		expect(target).toBeTruthy();
+
+		// Click the centre of the map — now over the panned-in busy node.
+		const mapBox = await page.locator('canvas.maplibregl-canvas').boundingBox();
+		if (!mapBox) throw new Error('map canvas not visible');
+		await page.mouse.click(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
+
+		// The click selects the node (inspect panel shows it).
+		const inspect = page.locator('.sidebar-right details.panel', { hasText: 'Inspect' });
+		await expect(inspect.locator('.badge.node')).toBeVisible({ timeout: 5_000 });
+
+		// FlowPies overlay appears for the selected node.
+		const pies = page.locator('svg.pies');
+		await expect(pies).toBeVisible({ timeout: 5_000 });
+		await expect(pies.locator('g.pie').first()).toBeVisible();
+
+		const countShapes = () =>
+			page.evaluate(() => {
+				const groups = [...document.querySelectorAll('svg.pies g.pie')];
+				return {
+					groups: groups.length,
+					paths: groups.reduce((n, g) => n + g.querySelectorAll('path').length, 0),
+					circles: groups.reduce((n, g) => n + g.querySelectorAll('circle').length, 0)
+				};
+			});
+
+		const seg = (label) => page.locator('button', { hasText: new RegExp(`^${label}$`) }).first();
+
+		// Out mode: no pie slices (<path>), only plain circles.
+		await seg('Out').click();
+		await expect.poll(async () => (await countShapes()).paths).toBe(0);
+		expect((await countShapes()).circles).toBeGreaterThan(0);
+
+		// In mode: same — plain circles, no pies.
+		await seg('In').click();
+		await expect.poll(async () => (await countShapes()).paths).toBe(0);
+
+		// Unified mode: at least one node carries both directions → a two-slice pie.
+		await seg('Unified').click();
+		await expect.poll(async () => (await countShapes()).paths).toBeGreaterThan(0);
+
+		// Restore line visibility and clean up the flow toggle for later tests.
+		await page.evaluate(() => {
+			const m = window.__map;
+			for (const id of ['flow-ovin-gem-line', 'flow-ovin-gem-casing']) {
+				if (m.getLayer(id)) m.setLayoutProperty(id, 'visibility', 'visible');
+			}
+		});
+		await enable.uncheck();
+		await expect(page.locator('.status')).toHaveCount(1);
+	});
+
 	test('map layers panel toggles boundary, built-up, province, and basemap labels', async ({
 		page
 	}) => {

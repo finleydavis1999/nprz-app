@@ -29,7 +29,6 @@
 	import ModelDock from '$lib/ui/ModelDock.svelte';
 	import ModelResults from '$lib/ui/ModelResults.svelte';
 	import SavedLayers from '$lib/ui/SavedLayers.svelte';
-	import SegmentedControl from '$lib/ui/SegmentedControl.svelte';
 	import FloatingDock from '$lib/ui/FloatingDock.svelte';
 	import DockToggleStrip from '$lib/ui/DockToggleStrip.svelte';
 	import InspectPanel from '$lib/ui/InspectPanel.svelte';
@@ -55,6 +54,7 @@
 	import { printView } from '$lib/state/print-view.svelte.js';
 	import { geoNames } from '$lib/state/geo-names.svelte.js';
 	import { scaleLabel, scaleUnit } from '$lib/scales.js';
+	import DirectionalFlowLayer from '$lib/map/DirectionalFlowLayer.svelte';
 
 	let { data } = $props();
 	let lassoActive = $state(false);
@@ -314,12 +314,80 @@
 			if (scoped) {
 				const oIn = studyIds.has(f.o);
 				const dIn = studyIds.has(f.d);
-				if (mode === 'within' ? !(oIn && dIn) : !(oIn || dIn)) return false;
+				switch (mode) {
+					case 'within':
+						if (!(oIn && dIn)) return false;
+						break;
+					case 'origin-in':
+						if (!oIn) return false;
+						break;
+					case 'dest-in':
+						if (!dIn) return false;
+						break;
+					case 'touches':
+						if (!(oIn || dIn)) return false;
+						break;
+					default:
+						if (!(oIn && dIn)) return false;
+						break;
+				}
 			}
 			return true;
 		});
 	});
-	const flowsCapped = $derived(filteredFlowsAll.length > FLOW_RENDER_CAP);
+	// Merge bidirectional pairs into single entries for directional-gradient
+	// rendering. Each pair is keyed canonically (smaller area_code first) so
+	// A→B and B→A collapse to one entry regardless of encounter order — but the
+	// emitted entry is then oriented so `o→d` runs along the DOMINANT (larger)
+	// direction. That keeps the merged line's curve deterministic and meaningful
+	// (it bends the way net movement flows) instead of flipping with the
+	// arbitrary code order, and makes `fwdVal` always the major share so the
+	// renderer can color the dominant segment consistently. `total` drives line
+	// width; the fwd/total ratio drives the gradient split point. Only computed
+	// when directional mode is on.
+	const directionalFlows = $derived.by(() => {
+		if (!flowCartography.directional) return [];
+		/** @type {Map<string, {o: string, d: string, fwdVal: number, revVal: number}>} */
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local accumulator, not reactive state
+		const pairs = new Map();
+		for (const f of filteredFlows) {
+			// Canonical orientation: smaller code is always `o`.
+			const forward = f.o < f.d;
+			const o = forward ? f.o : f.d;
+			const d = forward ? f.d : f.o;
+			const key = `${o}|${d}`;
+			let pair = pairs.get(key);
+			if (!pair) {
+				pair = { o, d, fwdVal: 0, revVal: 0 };
+				pairs.set(key, pair);
+			}
+			if (forward) pair.fwdVal += f.value;
+			else pair.revVal += f.value;
+		}
+		const out = [];
+		const minW = flow.minWeight;
+		for (const p of pairs.values()) {
+			const total = p.fwdVal + p.revVal;
+			if (total <= 0) continue;
+			// Orient o→d along the dominant direction so the line's curve is
+			// deterministic and `fwdVal` is always the major share.
+			let { o, d, fwdVal, revVal } = p;
+			if (revVal > fwdVal) {
+				[o, d] = [d, o];
+				[fwdVal, revVal] = [revVal, fwdVal];
+			}
+			// Honest sliver: if the minority direction is entirely absent AND a
+			// min-weight filter is active, the absence almost always means
+			// "filtered below threshold" rather than "truly zero" — so show a thin
+			// band of the minority color rather than a pure single-color line. At
+			// minWeight=0 an absent direction is genuinely zero, so leave it pure.
+			let fwdFrac = fwdVal / total; // always ≥ 0.5 after orientation
+			if (minW > 0 && revVal === 0) fwdFrac = 0.95; // 5% minority sliver at the d end
+			out.push({ o, d, fwdVal, revVal, total, value: total, fwdFrac });
+		}
+		return out;
+	});
+	const flowsCapped = $derived.by(() => filteredFlowsAll.length > FLOW_RENDER_CAP);
 	const filteredFlows = $derived.by(() => {
 		if (!flowsCapped) return filteredFlowsAll;
 		// Top-N by value — sort descending and slice.
@@ -506,40 +574,78 @@
 					/>
 				{/key}
 			{/if}
-			{#if flowsShown && filteredFlows.length && flowBreaks && centroids}
-				<!-- Remount FlowLayer when the dataset/scale (and thus sourceId)
-				     changes: FlowLayer only creates its MapLibre source + layers in
-				     onMount keyed off sourceId, so without a fresh mount a switch
-				     would leave the new source uncreated. Pairs with FlowLayer's own
-				     getLayer guards, which suppress the transient style error. -->
-				{#key `${flow.dataset}-${flow.scale}`}
-					<FlowLayer
-						sourceId="flow-{flow.dataset}-{flow.scale}"
-						flows={filteredFlows}
-						{centroids}
-						breaks={flowBreaks}
-						colors={flowColors}
-						widthMin={flowCartography.widthMin}
-						widthMax={flowCartography.widthMax}
-						opacity={flowCartography.opacity}
-						curvature={flowCartography.curvature}
-						selectedNode={ui.selectedFlowNode}
-						mode={ui.flowMode}
-					/>
-					{#if ui.selectedFlowNode}
-						<FlowPies
+			{#if flowsShown && centroids}
+				{#if flowCartography.directional && directionalFlows.length}
+					{#key `dir-${flow.dataset}-${flow.scale}`}
+						<DirectionalFlowLayer
+							sourceId="flow-directional-{flow.dataset}-{flow.scale}"
+							pairs={directionalFlows}
+							{centroids}
+							widthMin={flowCartography.widthMin}
+							widthMax={flowCartography.widthMax}
+							opacity={flowCartography.opacity}
+							curvature={flowCartography.curvature}
+							method={flowCartography.method}
+							n={flowCartography.n}
+							showBalance={flowCartography.showBalance}
 							selectedNode={ui.selectedFlowNode}
+							mode={ui.flowMode}
+						/>
+						{#if ui.selectedFlowNode}
+							<FlowPies
+								selectedNode={ui.selectedFlowNode}
+								flows={filteredFlows}
+								{centroids}
+								scale={flow.scale}
+								minWeight={flow.minWeight}
+								flowMode={ui.flowMode}
+								minRadius={flowCartography.pieMinRadius}
+								maxRadius={flowCartography.pieMaxRadius}
+							/>
+						{/if}
+					{/key}
+				{:else if filteredFlows.length && flowBreaks}
+					<!-- Remount FlowLayer when the dataset/scale (and thus sourceId)
+					     changes: FlowLayer only creates its MapLibre source + layers in
+					     onMount keyed off sourceId, so without a fresh mount a switch
+					     would leave the new source uncreated. Pairs with FlowLayer's own
+					     getLayer guards, which suppress the transient style error. -->
+					{#key `${flow.dataset}-${flow.scale}`}
+						<FlowLayer
+							sourceId="flow-{flow.dataset}-{flow.scale}"
 							flows={filteredFlows}
 							{centroids}
-							scale={flow.scale}
-							minWeight={flow.minWeight}
+							breaks={flowBreaks}
+							colors={flowColors}
+							widthMin={flowCartography.widthMin}
+							widthMax={flowCartography.widthMax}
+							opacity={flowCartography.opacity}
+							curvature={flowCartography.curvature}
+							selectedNode={ui.selectedFlowNode}
+							mode={ui.flowMode}
 						/>
-					{/if}
-				{/key}
+						{#if ui.selectedFlowNode}
+							<FlowPies
+								selectedNode={ui.selectedFlowNode}
+								flows={filteredFlows}
+								{centroids}
+								scale={flow.scale}
+								minWeight={flow.minWeight}
+								flowMode={ui.flowMode}
+								minRadius={flowCartography.pieMinRadius}
+								maxRadius={flowCartography.pieMaxRadius}
+							/>
+						{/if}
+					{/key}
+				{/if}
 			{/if}
 			<InspectInteraction
 				nodeFillLayerId="choropleth-{selection.scale}-fill"
-				flowLineLayerId={flow.enabled ? `flow-${flow.dataset}-${flow.scale}-line` : null}
+				flowLineLayerId={flow.enabled
+					? flowCartography.directional
+						? `flow-directional-${flow.dataset}-${flow.scale}-line`
+						: `flow-${flow.dataset}-${flow.scale}-line`
+					: null}
 				nodeScale={selection.scale}
 				flowScale={flow.scale}
 				flowEnabled={flow.enabled}
@@ -675,25 +781,46 @@
 				{#if studyArea.ids.size > 0}
 					<Field
 						label="Study area"
-						info="Filter flows by the active lasso. Within: both origin and destination must be inside. Touches: either side inside."
+						info="Filter flows by the active lasso. Entirely within: both origin and destination inside. Origin within: origin inside (outflows). Destination within: destination inside (inflows). O or D within: either side inside."
 					>
-						<SegmentedControl
-							ariaLabel="Study area mode"
-							value={flow.studyAreaMode}
-							onChange={(v) => (flow.studyAreaMode = v)}
-							options={[
-								{
-									value: 'within',
-									label: 'entirely within',
-									title: 'Keep OD pairs where BOTH origin and destination are in the study area'
-								},
-								{
-									value: 'touches',
-									label: 'origin OR destination within',
-									title: 'Keep OD pairs where EITHER side is in the study area'
-								}
-							]}
-						/>
+						<div class="study-area-grid" role="radiogroup" aria-label="Study area mode">
+							<button
+								type="button"
+								class:active={flow.studyAreaMode === 'within'}
+								aria-pressed={flow.studyAreaMode === 'within'}
+								onclick={() => (flow.studyAreaMode = 'within')}
+								title="Keep OD pairs where BOTH origin and destination are in the study area"
+							>
+								Entirely within
+							</button>
+							<button
+								type="button"
+								class:active={flow.studyAreaMode === 'origin-in'}
+								aria-pressed={flow.studyAreaMode === 'origin-in'}
+								onclick={() => (flow.studyAreaMode = 'origin-in')}
+								title="Keep OD pairs where the ORIGIN is in the study area (outflows)"
+							>
+								Origin within
+							</button>
+							<button
+								type="button"
+								class:active={flow.studyAreaMode === 'dest-in'}
+								aria-pressed={flow.studyAreaMode === 'dest-in'}
+								onclick={() => (flow.studyAreaMode = 'dest-in')}
+								title="Keep OD pairs where the DESTINATION is in the study area (inflows)"
+							>
+								Destination within
+							</button>
+							<button
+								type="button"
+								class:active={flow.studyAreaMode === 'touches'}
+								aria-pressed={flow.studyAreaMode === 'touches'}
+								onclick={() => (flow.studyAreaMode = 'touches')}
+								title="Keep OD pairs where EITHER side is in the study area"
+							>
+								O or D within
+							</button>
+						</div>
 					</Field>
 				{/if}
 				<div class="save-divider"></div>
@@ -741,6 +868,10 @@
 
 	<Panel title="Flow cartography" open={false}>
 		<div class="stack">
+			<Toggle bind:checked={flowCartography.directional} label="Directional gradient" />
+			{#if flowCartography.directional}
+				<Toggle bind:checked={flowCartography.showBalance} label="Balance point" />
+			{/if}
 			<ClassificationControls target={flowCartography} useDiverging={flowUseDiverging} />
 		</div>
 	</Panel>
@@ -792,7 +923,7 @@
 				title: displayed.activeLayer?.name ?? 'Areas'
 			}
 		: null}
-	flow={flowsShown
+	flow={flowsShown && !flowCartography.directional
 		? {
 				breaks: flowBreaks,
 				colors: flowColors,
@@ -931,5 +1062,26 @@
 		font-variant-numeric: tabular-nums;
 		border-radius: var(--radius);
 		pointer-events: none;
+	}
+	.study-area-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--spacing-1);
+		width: 100%;
+	}
+	.study-area-grid button {
+		background: transparent;
+		border: 1px solid var(--color-line);
+		border-radius: var(--radius);
+		padding: var(--spacing-1) var(--spacing-2);
+		font-size: var(--text-xs);
+		color: var(--color-muted);
+		cursor: pointer;
+		text-align: center;
+	}
+	.study-area-grid button.active {
+		background: var(--color-accent);
+		color: var(--color-accent-fg);
+		border-color: var(--color-accent);
 	}
 </style>
