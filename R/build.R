@@ -24,6 +24,7 @@ source("R/edges/woonwerk.R")
 source("R/edges/werkwerk.R")
 source("R/edges/migration.R")
 source("R/nodes/cbs-vk100.R")
+source("R/nodes/cbs-kwb.R")
 
 cat("=== building geo ===\n")
 geo <- list(
@@ -43,7 +44,8 @@ datasets <- list(
   demographics  = build_demographics(),
   `banen-werk`  = build_banen_werk(),
   `banen-woon`  = build_banen_woon(),
-  `cbs-vk100`   = build_cbs_vk100()
+  `cbs-vk100`   = build_cbs_vk100(),
+  `cbs-kwb`     = build_cbs_kwb()
 )
 
 cat("\n=== building flow datasets ===\n")
