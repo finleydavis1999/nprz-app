@@ -38,7 +38,12 @@ const crossOriginIsolationPlugin = {
 export default defineConfig({
 	plugins: [crossOriginIsolationPlugin, tailwindcss(), sveltekit()],
 	server: {
-		fs: { allow: [mainRepoRoot] }
+		fs: { allow: [mainRepoRoot] },
+		// Disable the chokidar watcher when launched by the Playwright e2e web
+		// server. On Linux CI, inotify-backed fs.watch opens one fd per file and
+		// exceeds the container's ulimit -n -> EMFILE. e2e never edits files, so
+		// the watcher is dead weight. Gated by env so normal `npm run dev` keeps HMR.
+		watch: process.env.VITE_DISABLE_WATCH ? null : undefined
 	},
 	test: {
 		expect: { requireAssertions: true },

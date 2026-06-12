@@ -29,6 +29,7 @@ export default defineConfig({
 		reuseExistingServer: !process.env.CI,
 		timeout: 60_000,
 		env: {
+			VITE_DISABLE_WATCH: '1', // no HMR needed for e2e; avoids EMFILE on Linux CI
 			ORIGIN: `http://localhost:${PORT}`,
 			BETTER_AUTH_SECRET: 'dev-secret-32-chars-padding-okok',
 			DATABASE_URL: 'local.db',
