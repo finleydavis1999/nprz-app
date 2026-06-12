@@ -13,6 +13,21 @@ import { sveltekit } from '@sveltejs/kit/vite';
 // resolves to the project root itself, i.e. a no-op.
 const mainRepoRoot = dirname(realpathSync(join(import.meta.dirname, 'node_modules')));
 
+// Disable the chokidar watcher when launched by the Playwright e2e web server.
+// On Linux CI, inotify-backed fs.watch opens one fd per file and exceeds the
+// runner's ulimit -n -> EMFILE. e2e never edits files, so the watcher is dead
+// weight. A user-level `server.watch: null` does NOT work: SvelteKit's config
+// hook returns its own `server.watch` object and Vite's mergeConfigRecursively
+// replaces a null on the existing side with the incoming object (and skips
+// nulls on the incoming side, so a config hook can't return null either). The
+// only reliable disable is mutating the resolved config after all merging.
+const disableWatchPlugin = {
+	name: 'e2e-disable-watch',
+	configResolved(config) {
+		config.server.watch = null;
+	}
+};
+
 // Vite middleware to set cross-origin headers on every dev response.
 // SvelteKit's hooks.server.js only runs for page/endpoint responses, not for
 // Vite-served assets (static/, /@fs/, node_modules). Without these headers
@@ -36,14 +51,14 @@ const crossOriginIsolationPlugin = {
 };
 
 export default defineConfig({
-	plugins: [crossOriginIsolationPlugin, tailwindcss(), sveltekit()],
+	plugins: [
+		crossOriginIsolationPlugin,
+		tailwindcss(),
+		sveltekit(),
+		...(process.env.VITE_DISABLE_WATCH ? [disableWatchPlugin] : [])
+	],
 	server: {
-		fs: { allow: [mainRepoRoot] },
-		// Disable the chokidar watcher when launched by the Playwright e2e web
-		// server. On Linux CI, inotify-backed fs.watch opens one fd per file and
-		// exceeds the container's ulimit -n -> EMFILE. e2e never edits files, so
-		// the watcher is dead weight. Gated by env so normal `npm run dev` keeps HMR.
-		watch: process.env.VITE_DISABLE_WATCH ? null : undefined
+		fs: { allow: [mainRepoRoot] }
 	},
 	test: {
 		expect: { requireAssertions: true },

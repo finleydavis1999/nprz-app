@@ -52,6 +52,9 @@ test:e2e:
   script:
     - npm ci --prefer-offline
     - npx playwright install --with-deps chromium
+    # Raise the soft fd limit to the hard limit: shared runners vary in their
+    # default ulimit -n, which made EMFILE failures land on some runners only.
+    - ulimit -n "$(ulimit -Hn)" || true
     - npm run test:e2e
   artifacts:
     when: on_failure
