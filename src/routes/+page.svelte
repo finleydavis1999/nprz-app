@@ -18,6 +18,7 @@
 	import ScaleToggle from '$lib/ui/ScaleToggle.svelte';
 	import DatasetPicker from '$lib/ui/DatasetPicker.svelte';
 	import YearPicker from '$lib/ui/YearPicker.svelte';
+	import AgePicker from '$lib/ui/AgePicker.svelte';
 	import VariablePicker from '$lib/ui/VariablePicker.svelte';
 	import CategoryFilters from '$lib/ui/CategoryFilters.svelte';
 	import SaveLayerInput from '$lib/ui/SaveLayerInput.svelte';
@@ -191,6 +192,8 @@
 			scale: flow.scale,
 			yearMin: flow.yearMin,
 			yearMax: flow.yearMax,
+			ageMin: flow.ageMin,
+			ageMax: flow.ageMax,
 			filters: flow.filters,
 			includeSelfLoops: flow.includeSelfLoops
 		};
@@ -748,6 +751,7 @@
 					</p>
 				{/if}
 				<YearPicker {manifest} state={flow} section="flows" />
+				<AgePicker {manifest} state={flow} section="flows" />
 				<CategoryFilters {manifest} state={flow} section="flows" />
 				<LogRangeFilter
 					label="Min weight"

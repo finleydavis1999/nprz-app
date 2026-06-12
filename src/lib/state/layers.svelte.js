@@ -104,6 +104,7 @@ class LayersState {
 	 *   scale: string,
 	 *   dataset?: string, year?: number,
 	 *   yearMin?: number, yearMax?: number,
+	 *   ageMin?: number, ageMax?: number,
 	 *   filters?: Record<string, number[]>,
 	 *   includeSelfLoops?: boolean,
 	 *   expression?: string,
@@ -249,6 +250,8 @@ class LayersState {
 				dataset: flow.dataset,
 				yearMin: flow.yearMin,
 				yearMax: flow.yearMax,
+				ageMin: flow.ageMin,
+				ageMax: flow.ageMax,
 				filters: structuredClone($state.snapshot(flow.filters)),
 				includeSelfLoops: flow.includeSelfLoops
 			}
@@ -418,6 +421,8 @@ class LayersState {
 					scale: layer.scale,
 					yearMin: layer.yearMin,
 					yearMax: layer.yearMax,
+					ageMin: layer.ageMin,
+					ageMax: layer.ageMax,
 					filters: layer.filters,
 					includeSelfLoops: layer.includeSelfLoops
 				});

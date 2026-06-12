@@ -118,6 +118,8 @@
 			scale: flow.scale,
 			yearMin: flow.yearMin,
 			yearMax: flow.yearMax,
+			ageMin: flow.ageMin,
+			ageMax: flow.ageMax,
 			filters: flow.filters,
 			includeSelfLoops: flow.includeSelfLoops
 		};

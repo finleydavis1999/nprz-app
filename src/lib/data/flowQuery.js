@@ -11,10 +11,27 @@ import { ensureRegistered, num, valueExpr } from './parquet-register.js';
 function buildSql(
 	parquetName,
 	valueSql,
-	{ yearMin, yearMax, filters = {}, includeSelfLoops, yearRange, weightCol, countSql }
+	{
+		yearMin,
+		yearMax,
+		ageMin,
+		ageMax,
+		ageRange,
+		filters = {},
+		includeSelfLoops,
+		yearRange,
+		weightCol,
+		countSql
+	}
 ) {
 	const wheres = [];
 	if (yearRange) wheres.push(`year BETWEEN ${num(yearMin)} AND ${num(yearMax)}`);
+	// Age is a plain row filter (unlike `year`, it never aggregates the value).
+	// Only applied when the dataset declares a `range`-typed `age` field and
+	// both bounds are finite — old saved layers without age params skip it.
+	if (ageRange && Number.isFinite(ageMin) && Number.isFinite(ageMax)) {
+		wheres.push(`age BETWEEN ${num(ageMin)} AND ${num(ageMax)}`);
+	}
 	for (const [field, values] of Object.entries(filters)) {
 		if (!values || values.length === 0) continue;
 		wheres.push(`${field} IN (${values.map(num).join(',')})`);
@@ -38,11 +55,14 @@ export async function runFlows({
 	scale = 'gem',
 	yearMin,
 	yearMax,
+	ageMin,
+	ageMax,
 	filters = {},
 	includeSelfLoops = false
 }) {
 	const { name, entry } = await ensureRegistered({ section: 'flows', dataset, scale });
 	const yearRange = entry.fields?.year?.type === 'range';
+	const ageRange = entry.fields?.age?.type === 'range';
 	const weightCol = entry.weightCol ?? 'count';
 	const valueSql = yearRange
 		? valueExpr({ entry, yearMin, yearMax })
@@ -55,6 +75,9 @@ export async function runFlows({
 		const sql = buildSql(name, valueSql, {
 			yearMin,
 			yearMax,
+			ageMin,
+			ageMax,
+			ageRange,
 			filters,
 			includeSelfLoops,
 			yearRange,

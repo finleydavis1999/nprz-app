@@ -170,6 +170,60 @@ test.describe('app', () => {
 		await expect(page.locator('.status')).toHaveCount(1);
 	});
 
+	test('ODiN flow exposes an age range filter that narrows the query', async ({ page }) => {
+		test.slow();
+		const flowPanel = page.locator('details.panel', { hasText: 'Flow data' });
+		await flowPanel.locator('summary').click();
+		const enable = flowPanel
+			.locator('label.toggle', { hasText: 'Show flows' })
+			.locator('input[type="checkbox"]');
+		await enable.check();
+
+		// The age range slider renders for ODiN (the default flow dataset) and
+		// defaults to the full 0–99 span. It must NOT appear as a category chip.
+		const ageField = flowPanel.locator('label.field', { hasText: 'Leeftijd' });
+		await expect(ageField).toHaveCount(1);
+		await expect(ageField).toContainText(/0\s*[–-]\s*99/);
+
+		const status = page.locator('.status').nth(1);
+		await expect(status).toContainText(/flow:.*flows/i, { timeout: 15_000 });
+		await expect(status).not.toContainText('querying', { timeout: 15_000 });
+
+		// `flow: … N flows` — N is the total OD pairs returned by the query
+		// (the number right before "flows", whether or not a "shown / total"
+		// split is present). That's what the age WHERE filter changes.
+		const totalFlows = async () => {
+			const txt = await status.innerText();
+			const m = txt.match(/([\d,]+)\s*flows/i);
+			return m ? Number(m[1].replace(/,/g, '')) : NaN;
+		};
+		const fullCount = await totalFlows();
+		expect(fullCount).toBeGreaterThan(0);
+
+		// Drag the lower (ageMin) handle up to 90 → restrict to ages 90–99.
+		// The first `.thumb` input is the lower handle.
+		const minThumb = ageField.locator('input.thumb').first();
+		await minThumb.evaluate((el) => {
+			el.value = '90';
+			el.dispatchEvent(new Event('input', { bubbles: true }));
+		});
+		await expect(ageField).toContainText(/90\s*[–-]\s*99/);
+		await expect(status).not.toContainText('querying', { timeout: 15_000 });
+
+		// Restricting to the oldest band returns strictly fewer flows than the
+		// full 0–99 range — proves the age bound reaches the DuckDB query.
+		await expect.poll(totalFlows, { timeout: 15_000 }).toBeLessThan(fullCount);
+
+		// Reset the range so persisted flow state doesn't leak into later tests.
+		await minThumb.evaluate((el) => {
+			el.value = '0';
+			el.dispatchEvent(new Event('input', { bubbles: true }));
+		});
+		await expect(ageField).toContainText(/0\s*[–-]\s*99/);
+		await enable.uncheck();
+		await expect(page.locator('.status')).toHaveCount(1);
+	});
+
 	test('directional gradient mode swaps the classic flow layer for the paired layer', async ({
 		page
 	}) => {

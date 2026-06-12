@@ -15,6 +15,7 @@ build_ovin <- function() {
       'GM' || printf('%04d', CAST(c_vgemf AS INTEGER)) AS o_code,
       'GM' || printf('%04d', CAST(c_agemf AS INTEGER)) AS d_code,
       CAST(year AS INTEGER) AS year,
+      CAST(c_lft     AS INTEGER) AS age,
       CAST(c_motief  AS INTEGER) AS motief,
       CAST(c_modus   AS INTEGER) AS modus,
       CAST(c_opl     AS INTEGER) AS opl,
@@ -24,7 +25,7 @@ build_ovin <- function() {
       SUM(factorv)::DOUBLE AS weight
     FROM src.ovin20042024
     WHERE c_vgemf IS NOT NULL AND c_agemf IS NOT NULL
-    GROUP BY o_code, d_code, year, motief, modus, opl, hhtype, maatsch
+    GROUP BY o_code, d_code, year, age, motief, modus, opl, hhtype, maatsch
     ORDER BY year, o_code, d_code
   ", "static/data/parquet/ovin-edges-gem.parquet")
 
@@ -33,6 +34,7 @@ build_ovin <- function() {
       printf('%04d', CAST(c_vpcf AS INTEGER)) AS o_code,
       printf('%04d', CAST(c_apcf AS INTEGER)) AS d_code,
       CAST(year AS INTEGER) AS year,
+      CAST(c_lft     AS INTEGER) AS age,
       CAST(c_motief  AS INTEGER) AS motief,
       CAST(c_modus   AS INTEGER) AS modus,
       CAST(c_opl     AS INTEGER) AS opl,
@@ -42,7 +44,7 @@ build_ovin <- function() {
       SUM(factorv)::DOUBLE AS weight
     FROM src.ovin20042024
     WHERE c_vpcf IS NOT NULL AND c_apcf IS NOT NULL
-    GROUP BY o_code, d_code, year, motief, modus, opl, hhtype, maatsch
+    GROUP BY o_code, d_code, year, age, motief, modus, opl, hhtype, maatsch
     ORDER BY year, o_code, d_code
   ", "static/data/parquet/ovin-edges-pc4.parquet")
 
@@ -60,6 +62,15 @@ build_ovin <- function() {
         type = "range", label = "Periode",
         min = 2004L, max = 2024L,
         defaultMin = 2018L, defaultMax = 2018L
+      ),
+      age = list(
+        # Raw single-year age (source column c_lft, 0-99, fully populated).
+        # Exposed as a min/max range slider (like `year`) but applied purely as
+        # a WHERE ... BETWEEN filter — it does NOT aggregate the value the way
+        # the year range does. Full 0-99 span = no filtering.
+        type = "range", label = "Leeftijd",
+        min = 0L, max = 99L,
+        defaultMin = 0L, defaultMax = 99L
       ),
       motief = list(
         type = "multi", label = "Motief",
