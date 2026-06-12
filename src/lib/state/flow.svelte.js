@@ -22,6 +22,13 @@ const DEFAULTS = Object.freeze({
 	// Inclusive year range. yearMin === yearMax = single year.
 	yearMin: 2018,
 	yearMax: 2018,
+	// Inclusive age range (datasets that declare a `range`-typed `age` field,
+	// e.g. ODiN). Applied as a `age BETWEEN ageMin AND ageMax` WHERE filter —
+	// unlike the year range it does NOT aggregate the value. The full source
+	// span (0-99) means "all ages", i.e. no filtering. Datasets without an age
+	// range field ignore these (the AgePicker renders nothing).
+	ageMin: 0,
+	ageMax: 99,
 	filters: /** @type {Record<string, number[]>} */ ({}),
 	// Client-side filters: only render flows whose post-aggregation
 	// *magnitude* (|value|) is >= minWeight and (on weighted layers) whose
@@ -67,6 +74,8 @@ class FlowState {
 	scale = $state(DEFAULTS.scale);
 	yearMin = $state(DEFAULTS.yearMin);
 	yearMax = $state(DEFAULTS.yearMax);
+	ageMin = $state(DEFAULTS.ageMin);
+	ageMax = $state(DEFAULTS.ageMax);
 	filters = $state(structuredClone(DEFAULTS.filters));
 	minWeight = $state(DEFAULTS.minWeight);
 	minCount = $state(DEFAULTS.minCount);
@@ -84,6 +93,8 @@ class FlowState {
 			if (typeof p?.scale === 'string') this.scale = p.scale;
 			if (Number.isFinite(p?.yearMin)) this.yearMin = p.yearMin;
 			if (Number.isFinite(p?.yearMax)) this.yearMax = p.yearMax;
+			if (Number.isFinite(p?.ageMin)) this.ageMin = p.ageMin;
+			if (Number.isFinite(p?.ageMax)) this.ageMax = p.ageMax;
 			if (p?.filters && typeof p.filters === 'object') this.filters = p.filters;
 			if (Number.isFinite(p?.minWeight)) this.minWeight = p.minWeight;
 			if (Number.isFinite(p?.minCount)) this.minCount = p.minCount;
@@ -112,6 +123,8 @@ class FlowState {
 					scale: this.scale,
 					yearMin: this.yearMin,
 					yearMax: this.yearMax,
+					ageMin: this.ageMin,
+					ageMax: this.ageMax,
 					filters: this.filters,
 					minWeight: this.minWeight,
 					minCount: this.minCount,
