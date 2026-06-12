@@ -944,8 +944,88 @@
         "n": 5,
         "palette": "YlOrRd"
       }
+    },
+    "cbs-kwb": {
+      "name": "CBS Kerncijfers Wijken en Buurten",
+      "description": "CBS Kerncijfers Wijken en Buurten, meerjarig (2015-2025), op buurt- en gemeenteniveau. Gemeentecijfers zijn opgeteld uit de buurten (aantallen) of inwoner-/woninggewogen gemiddeld (percentages, afstanden). Bedrijfsvestigingen vanaf 2022, arbeids- en zorgvariabelen vanaf 2023.",
+      "scales": {
+        "buurt": "parquet/cbs-kwb-buurt.parquet",
+        "gem": "parquet/cbs-kwb-gem.parquet"
+      },
+      "fields": {
+        "year": {
+          "type": "single",
+          "label": "Jaar",
+          "values": [
+            { "id": 2015, "label": "2015" },
+            { "id": 2017, "label": "2017" },
+            { "id": 2022, "label": "2022" },
+            { "id": 2023, "label": "2023" },
+            { "id": 2024, "label": "2024" },
+            { "id": 2025, "label": "2025" }
+          ],
+          "default": 2024
+        },
+        "variable": {
+          "type": "single",
+          "label": "Variabele",
+          "values": [
+            { "id": 1,  "label": "Inwoners totaal",                        "group": "Bevolking" },
+            { "id": 2,  "label": "Mannen",                                 "group": "Bevolking" },
+            { "id": 3,  "label": "Vrouwen",                                "group": "Bevolking" },
+            { "id": 4,  "label": "Inwoners 0-15 jaar",                     "group": "Bevolking" },
+            { "id": 5,  "label": "Inwoners 15-25 jaar",                    "group": "Bevolking" },
+            { "id": 6,  "label": "Inwoners 25-45 jaar",                    "group": "Bevolking" },
+            { "id": 7,  "label": "Inwoners 45-65 jaar",                    "group": "Bevolking" },
+            { "id": 8,  "label": "Inwoners 65 jaar en ouder",              "group": "Bevolking" },
+            { "id": 9,  "label": "Particuliere huishoudens",               "group": "Huishoudens" },
+            { "id": 10, "label": "Eenpersoonshuishoudens",                 "group": "Huishoudens" },
+            { "id": 11, "label": "Eenouderhuishoudens",                    "group": "Huishoudens" },
+            { "id": 12, "label": "Tweeouderhuishoudens",                   "group": "Huishoudens" },
+            { "id": 13, "label": "Gemiddelde huishoudensgrootte",          "group": "Huishoudens" },
+            { "id": 14, "label": "Woningen totaal",                        "group": "Wonen" },
+            { "id": 15, "label": "Gemiddelde WOZ-waarde",                  "group": "Wonen" },
+            { "id": 16, "label": "Bijstandsontvangers",                    "group": "Inkomen" },
+            { "id": 17, "label": "AO-uitkeringsontvangers",                "group": "Inkomen" },
+            { "id": 18, "label": "WW-uitkeringsontvangers",                "group": "Inkomen" },
+            { "id": 19, "label": "AOW-ontvangers",                         "group": "Inkomen" },
+            { "id": 20, "label": "Personenauto's",                         "group": "Mobiliteit" },
+            { "id": 21, "label": "Leerlingen primair onderwijs",           "group": "Onderwijs" },
+            { "id": 22, "label": "Leerlingen voortgezet onderwijs",        "group": "Onderwijs" },
+            { "id": 23, "label": "Studenten MBO",                          "group": "Onderwijs" },
+            { "id": 24, "label": "Studenten HBO",                          "group": "Onderwijs" },
+            { "id": 25, "label": "Studenten WO",                           "group": "Onderwijs" },
+            { "id": 26, "label": "Stedelijkheid (1=zeer sterk, 5=niet)",   "group": "Stedelijkheid" },
+            { "id": 27, "label": "Omgevingsadressendichtheid",             "group": "Stedelijkheid" },
+            { "id": 28, "label": "Afstand tot huisartsenpraktijk (km)",    "group": "Voorzieningen" },
+            { "id": 29, "label": "Afstand tot grote supermarkt (km)",      "group": "Voorzieningen" },
+            { "id": 30, "label": "Afstand tot basisonderwijs (km)",        "group": "Voorzieningen" },
+            { "id": 31, "label": "Oppervlakte land (ha)",                  "group": "Gebied" },
+            { "id": 32, "label": "Bedrijfsvestigingen totaal",             "group": "Economie" },
+            { "id": 33, "label": "Werkzame beroepsbevolking",              "group": "Arbeid" },
+            { "id": 34, "label": "Nettoarbeidsparticipatie (%)",           "group": "Arbeid" },
+            { "id": 35, "label": "% Werknemers",                           "group": "Arbeid" },
+            { "id": 36, "label": "Werknemers vaste arbeidsrelatie",        "group": "Arbeid" },
+            { "id": 37, "label": "Werknemers flexibele arbeidsrelatie",    "group": "Arbeid" },
+            { "id": 38, "label": "% Zelfstandigen",                        "group": "Arbeid" },
+            { "id": 39, "label": "Jongeren met jeugdzorg",                 "group": "Zorg" },
+            { "id": 40, "label": "% Jongeren met jeugdzorg",               "group": "Zorg" },
+            { "id": 41, "label": "Wmo-cliënten",                           "group": "Zorg" },
+            { "id": 42, "label": "Wmo-cliënten relatief (%)",              "group": "Zorg" }
+          ],
+          "default": 1
+        }
+      },
+      "countCol": "count",
+      "weightCol": "weight",
+      "yearAggregation": "sum",
+      "defaultClassification": {
+        "method": "jenks",
+        "n": 5,
+        "palette": "YlOrRd"
+      }
     }
-  },
+    },
   "flows": {
     "ovin": {
       "name": "Verplaatsingen 2004-2024 (OViN/ODiN)",
