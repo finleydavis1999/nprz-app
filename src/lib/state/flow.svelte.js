@@ -30,6 +30,9 @@ const DEFAULTS = Object.freeze({
 	ageMin: 0,
 	ageMax: 99,
 	filters: /** @type {Record<string, number[]>} */ ({}),
+	// Boolean query-modifier toggles keyed by manifest field id (fields of
+	// `type: "toggle"`, e.g. `divideYears`, `hhfilter`). Read by `runFlows`.
+	toggles: /** @type {Record<string, boolean>} */ ({}),
 	// Client-side filters: only render flows whose post-aggregation
 	// *magnitude* (|value|) is >= minWeight and (on weighted layers) whose
 	// observation count is >= minCount. The abs() lets signed flow data
@@ -77,6 +80,7 @@ class FlowState {
 	ageMin = $state(DEFAULTS.ageMin);
 	ageMax = $state(DEFAULTS.ageMax);
 	filters = $state(structuredClone(DEFAULTS.filters));
+	toggles = $state(structuredClone(DEFAULTS.toggles));
 	minWeight = $state(DEFAULTS.minWeight);
 	minCount = $state(DEFAULTS.minCount);
 	includeSelfLoops = $state(DEFAULTS.includeSelfLoops);
@@ -96,6 +100,7 @@ class FlowState {
 			if (Number.isFinite(p?.ageMin)) this.ageMin = p.ageMin;
 			if (Number.isFinite(p?.ageMax)) this.ageMax = p.ageMax;
 			if (p?.filters && typeof p.filters === 'object') this.filters = p.filters;
+			if (p?.toggles && typeof p.toggles === 'object') this.toggles = p.toggles;
 			if (Number.isFinite(p?.minWeight)) this.minWeight = p.minWeight;
 			if (Number.isFinite(p?.minCount)) this.minCount = p.minCount;
 			if (typeof p?.includeSelfLoops === 'boolean') this.includeSelfLoops = p.includeSelfLoops;
@@ -126,6 +131,7 @@ class FlowState {
 					ageMin: this.ageMin,
 					ageMax: this.ageMax,
 					filters: this.filters,
+					toggles: this.toggles,
 					minWeight: this.minWeight,
 					minCount: this.minCount,
 					includeSelfLoops: this.includeSelfLoops,

@@ -2,11 +2,13 @@
 	// A clear on/off switch with a label. Wraps a native checkbox so it stays
 	// keyboard-accessible and bindable; the checkbox is transparent but full-size
 	// (and on top) so it is always the click target — for users and for tests.
-	let { checked = $bindable(false), label } = $props();
+	// `onchange` reports the new state for callers that can't two-way bind (e.g.
+	// a switch whose value lives in a `Record<string, boolean>`).
+	let { checked = $bindable(false), label, onchange } = $props();
 </script>
 
 <label class="toggle">
-	<input type="checkbox" bind:checked />
+	<input type="checkbox" bind:checked onchange={() => onchange?.(checked)} />
 	<span class="track"></span>
 	<span class="text">{label}</span>
 </label>

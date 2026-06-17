@@ -27,12 +27,13 @@ build_migration <- function() {
       CAST(inks AS INTEGER) AS inks,
       CAST(opl  AS INTEGER) AS opl,
       CAST(sec  AS INTEGER) AS sec,
+      CAST(inkchanges AS INTEGER) AS inkchanges,
       SUM(value)::DOUBLE AS count,
       SUM(value)::DOUBLE AS weight
     FROM src.verhuizingen_19992018_gem
     WHERE gemPre IS NOT NULL AND gemPost IS NOT NULL AND year IN
       ('p99-02','p03-06','p07-10','p11-14','p15-18','p99-08','p09-18')
-    GROUP BY o_code, d_code, year, age, hh, inks, opl, sec
+    GROUP BY o_code, d_code, year, age, hh, inks, opl, sec, inkchanges
     ORDER BY year, o_code, d_code
   ", period_case), "static/data/parquet/migration-edges-gem.parquet")
 
@@ -46,12 +47,13 @@ build_migration <- function() {
       CAST(inks AS INTEGER) AS inks,
       CAST(opl  AS INTEGER) AS opl,
       CAST(sec  AS INTEGER) AS sec,
+      CAST(inkchanges AS INTEGER) AS inkchanges,
       SUM(value)::DOUBLE AS count,
       SUM(value)::DOUBLE AS weight
     FROM src.verhuizingen_19992018_pc
     WHERE pcPre IS NOT NULL AND pcPost IS NOT NULL AND year IN
       ('p99-02','p03-06','p07-10','p11-14','p15-18','p99-08','p09-18')
-    GROUP BY o_code, d_code, year, age, hh, inks, opl, sec
+    GROUP BY o_code, d_code, year, age, hh, inks, opl, sec, inkchanges
     ORDER BY year, o_code, d_code
   ", period_case), "static/data/parquet/migration-edges-pc4.parquet")
 
@@ -64,15 +66,17 @@ build_migration <- function() {
     ),
     fields = list(
       year = list(
+        # `years` = calendar-year span of each period, used by the divideYears
+        # toggle to normalise period totals to a per-year figure.
         type = "multi", label = "Periode",
         values = list(
-          list(id = 1L, label = "1999-2002"),
-          list(id = 2L, label = "2003-2006"),
-          list(id = 3L, label = "2007-2010"),
-          list(id = 4L, label = "2011-2014"),
-          list(id = 5L, label = "2015-2018"),
-          list(id = 6L, label = "1999-2008"),
-          list(id = 7L, label = "2009-2018")
+          list(id = 1L, label = "1999-2002", years = 4L),
+          list(id = 2L, label = "2003-2006", years = 4L),
+          list(id = 3L, label = "2007-2010", years = 4L),
+          list(id = 4L, label = "2011-2014", years = 4L),
+          list(id = 5L, label = "2015-2018", years = 4L),
+          list(id = 6L, label = "1999-2008", years = 10L),
+          list(id = 7L, label = "2009-2018", years = 10L)
         )
       ),
       age = list(
@@ -113,6 +117,34 @@ build_migration <- function() {
           list(id = 4L, label = "60-80%"),
           list(id = 5L, label = "80-100%")
         )
+      ),
+      sec = list(
+        type = "multi", label = "Sociaal-Economische Positie",
+        values = list(
+          list(id = 1L, label = "Voor en na verhuizing 'actief' (werkend, DGA, zelfstand of overig actief)"),
+          list(id = 2L, label = "Voor en na verhuizing ontvanger uitkering (ex. Pensioen)"),
+          list(id = 3L, label = "Voor en na verhuizing pensioen"),
+          list(id = 4L, label = "Voor en na verhuizing scholier/student"),
+          list(id = 5L, label = "Voor verhuizing actief, na verhuizing pensioen"),
+          list(id = 6L, label = "Voor verhuizing scholier/student, na verhuizing actief"),
+          list(id = 7L, label = "Voor scholier/student, na uitkering"),
+          list(id = 8L, label = "Voor actief, na uitkering"),
+          list(id = 9L, label = "Voor uitkering, na actief"),
+          list(id = 10L, label = "Voor en na verhuizing scholier/student, gecombineerd met voor verhuizing huishouden met kinderen, na verhuizing huishouden zonder kinderen")
+        )
+      ),
+      inkchanges = list(
+        type = "multi", label = "Inkomenverandering",
+        values = list(
+          list(id = 1L, label = "< -15%"),
+          list(id = 2L, label = "-15 - 0%"),
+          list(id = 3L, label = "0-10%"),
+          list(id = 4L, label = "10-25%"),
+          list(id = 5L, label = ">25%")
+        )
+      ),
+      divideYears = list(
+        type = "toggle", label = "Data per jaar", default = FALSE
       )
     )
   )

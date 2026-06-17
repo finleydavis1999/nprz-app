@@ -62,11 +62,13 @@ build_woonwerk <- function() {
     ),
     fields = list(
       year = list(
+        # `years` = calendar-year span of each period, used by the divideYears
+        # toggle to normalise period totals to a per-year figure.
         type = "multi", label = "Periode",
         values = list(
-          list(id = 1L, label = "2007-2012"),
-          list(id = 2L, label = "2012-2017"),
-          list(id = 3L, label = "2007-2017")
+          list(id = 1L, label = "2007-2012", years = 6L),
+          list(id = 2L, label = "2012-2017", years = 6L),
+          list(id = 3L, label = "2007-2017", years = 11L)
         )
       ),
       age = list(
@@ -98,12 +100,33 @@ build_woonwerk <- function() {
           list(id = 5L, label = "80-100%")
         )
       ),
+      sectorcat = list(
+        # Sector of the destination job. Already present in the parquet; ported
+        # 1:1 from the original metadata (edges-woonwerk-2018.js), matching the
+        # banen-werk/banen-woon `sectorcat` labels.
+        type = "multi", label = "Sector",
+        values = list(
+          list(id = 1L, label = "Materiaalgericht: Productie"),
+          list(id = 2L, label = "Materiaalgericht: Dienstverlening"),
+          list(id = 3L, label = "Informatiegericht: Commercieel"),
+          list(id = 4L, label = "Informatiegericht: Publiek (Quartair)"),
+          list(id = 5L, label = "Persoonsgericht: Retail, Ambacht, Horeca & Vervoer"),
+          list(id = 6L, label = "Persoonsgericht: Zorg, Onderwijs, Cultuur"),
+          list(id = 7L, label = "Landbouw"),
+          list(id = 8L, label = "Metaal- en maritieme industrie"),
+          list(id = 9L, label = "Overig (uitzend & onbekend)")
+        )
+      ),
       soortbaan = list(
         type = "multi", label = "Soort baan",
         values = list(
           list(id = 1L, label = "DGA"),
-          list(id = 2L, label = "Overig")
+          list(id = 2L, label = "Overig"),
+          list(id = 3L, label = "Stagaire, WSW, Oproep, Uitzend")
         )
+      ),
+      divideYears = list(
+        type = "toggle", label = "Data per jaar", default = FALSE
       )
     )
   )

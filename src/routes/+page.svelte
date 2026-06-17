@@ -21,6 +21,7 @@
 	import AgePicker from '$lib/ui/AgePicker.svelte';
 	import VariablePicker from '$lib/ui/VariablePicker.svelte';
 	import CategoryFilters from '$lib/ui/CategoryFilters.svelte';
+	import ToggleFilters from '$lib/ui/ToggleFilters.svelte';
 	import SaveLayerInput from '$lib/ui/SaveLayerInput.svelte';
 	import SaveFlowLayerInput from '$lib/ui/SaveFlowLayerInput.svelte';
 	import MapLayerControls from '$lib/ui/MapLayerControls.svelte';
@@ -195,6 +196,7 @@
 			ageMin: flow.ageMin,
 			ageMax: flow.ageMax,
 			filters: flow.filters,
+			toggles: flow.toggles,
 			includeSelfLoops: flow.includeSelfLoops
 		};
 		flowQuerying = true;
@@ -753,6 +755,7 @@
 				<YearPicker {manifest} state={flow} section="flows" />
 				<AgePicker {manifest} state={flow} section="flows" />
 				<CategoryFilters {manifest} state={flow} section="flows" />
+				<ToggleFilters {manifest} state={flow} section="flows" />
 				<LogRangeFilter
 					label="Min weight"
 					bind:value={flow.minWeight}

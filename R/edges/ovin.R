@@ -10,6 +10,11 @@ build_ovin <- function() {
   con <- duckdb_with_sqlite("raw-data/edges-ovin-2024.sqlite")
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
 
+  # Trip-grain (one row per surveyed trip), NOT pre-aggregated: `hhid` is
+  # retained so the `hhfilter` toggle can count distinct *households* (movers)
+  # post-filter instead of *trips* (movements) — see flowQuery.js. `count` = 1
+  # per trip so the generic SUM(count) flow path still yields the trip count,
+  # and `weight` = factorv (the survey expansion weight).
   write_parquet_from_query(con, "
     SELECT
       'GM' || printf('%04d', CAST(c_vgemf AS INTEGER)) AS o_code,
@@ -21,11 +26,11 @@ build_ovin <- function() {
       CAST(c_opl     AS INTEGER) AS opl,
       CAST(c_hhtype  AS INTEGER) AS hhtype,
       CAST(c_maatsch AS INTEGER) AS maatsch,
-      COUNT(*)::BIGINT     AS count,
-      SUM(factorv)::DOUBLE AS weight
+      CAST(hhid AS BIGINT) AS hhid,
+      1::BIGINT            AS count,
+      CAST(factorv AS DOUBLE) AS weight
     FROM src.ovin20042024
     WHERE c_vgemf IS NOT NULL AND c_agemf IS NOT NULL
-    GROUP BY o_code, d_code, year, age, motief, modus, opl, hhtype, maatsch
     ORDER BY year, o_code, d_code
   ", "static/data/parquet/ovin-edges-gem.parquet")
 
@@ -40,11 +45,11 @@ build_ovin <- function() {
       CAST(c_opl     AS INTEGER) AS opl,
       CAST(c_hhtype  AS INTEGER) AS hhtype,
       CAST(c_maatsch AS INTEGER) AS maatsch,
-      COUNT(*)::BIGINT     AS count,
-      SUM(factorv)::DOUBLE AS weight
+      CAST(hhid AS BIGINT) AS hhid,
+      1::BIGINT            AS count,
+      CAST(factorv AS DOUBLE) AS weight
     FROM src.ovin20042024
     WHERE c_vpcf IS NOT NULL AND c_apcf IS NOT NULL
-    GROUP BY o_code, d_code, year, age, motief, modus, opl, hhtype, maatsch
     ORDER BY year, o_code, d_code
   ", "static/data/parquet/ovin-edges-pc4.parquet")
 
@@ -127,13 +132,22 @@ build_ovin <- function() {
           list(id = 7L, label = "Overig"),
           list(id = 8L, label = "Nvt")
         )
+      ),
+      hhfilter = list(
+        # When on, count distinct *households* (movers) instead of *trips*
+        # (movements): the query dedupes by `hhDedupCol` (hhid) post-filter.
+        # See flowQuery.js.
+        type = "toggle", label = "Per huishouden", default = FALSE
       )
     ),
     countCol  = "count",
     weightCol = "weight",
+    # Column deduped on when the `hhfilter` toggle is active (counts distinct
+    # households rather than trips). Requires trip-grain rows (see queries above).
+    hhDedupCol = "hhid",
     # OViN/ODiN is a weighted survey: `weight` (SUM(factorv)) is the weighted
-    # trip estimate, `count` (COUNT(*)) is the raw number of survey trips it
-    # rests on. `weighted` flags the frontend to expose that count.
+    # trip estimate, `count` (SUM of 1-per-trip) is the raw number of survey
+    # trips it rests on. `weighted` flags the frontend to expose that count.
     weighted  = TRUE,
     # The displayed value divides weight by years*365 for trips per avg. day.
     yearAggregation = "daily",

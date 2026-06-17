@@ -121,6 +121,7 @@
 			ageMin: flow.ageMin,
 			ageMax: flow.ageMax,
 			filters: flow.filters,
+			toggles: flow.toggles,
 			includeSelfLoops: flow.includeSelfLoops
 		};
 		runFlows(args)

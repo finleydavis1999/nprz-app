@@ -18,6 +18,9 @@
 	function selectDataset(id) {
 		state.dataset = id;
 		state.filters = {};
+		// Toggles (divideYears/hhfilter) are field-specific like filters; clear
+		// them so a toggle from the old dataset can't linger on the new one.
+		if (state.toggles) state.toggles = {};
 		const yearField = manifest?.[section]?.[id]?.fields?.year;
 		if (yearField?.type === 'single') {
 			const years = yearField.values?.map((v) => v.id) ?? [];

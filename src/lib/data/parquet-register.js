@@ -49,7 +49,11 @@ export function num(v) {
 //   'sum'   (default) → SUM(weight)
 //   'mean'            → SUM(weight) / years     (years = yearMax - yearMin + 1)
 //   'daily'           → SUM(weight) / (years * 365)
-export function valueExpr({ entry, yearMin, yearMax, alias = 'value' }) {
+// `sumExpr` overrides what gets summed (defaults to the weight column). Pass a
+// pre-built column/expression — e.g. `'hw'` for an already-aggregated household
+// weight in an hhfilter subquery — when the same year normalisation must apply
+// to a different quantity.
+export function valueExpr({ entry, yearMin, yearMax, alias = 'value', sumExpr }) {
 	const years = num(yearMax) - num(yearMin) + 1;
 	if (years < 1) throw new Error(`invalid year range: ${yearMin}..${yearMax}`);
 	const mode = entry.yearAggregation ?? 'sum';
@@ -67,7 +71,7 @@ export function valueExpr({ entry, yearMin, yearMax, alias = 'value' }) {
 		default:
 			throw new Error(`unknown yearAggregation: ${mode}`);
 	}
-	const col = entry.weightCol ?? 'count';
+	const col = sumExpr ?? entry.weightCol ?? 'count';
 	const expr = divisor === 1 ? `SUM(${col})::DOUBLE` : `(SUM(${col})::DOUBLE / ${divisor})`;
 	return alias ? `${expr} AS ${alias}` : expr;
 }

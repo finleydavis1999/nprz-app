@@ -253,6 +253,7 @@ class LayersState {
 				ageMin: flow.ageMin,
 				ageMax: flow.ageMax,
 				filters: structuredClone($state.snapshot(flow.filters)),
+				toggles: structuredClone($state.snapshot(flow.toggles)),
 				includeSelfLoops: flow.includeSelfLoops
 			}
 		];
@@ -424,6 +425,7 @@ class LayersState {
 					ageMin: layer.ageMin,
 					ageMax: layer.ageMax,
 					filters: layer.filters,
+					toggles: layer.toggles,
 					includeSelfLoops: layer.includeSelfLoops
 				});
 				const map = new SvelteMap();

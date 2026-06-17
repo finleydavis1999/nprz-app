@@ -224,6 +224,88 @@ test.describe('app', () => {
 		await expect(page.locator('.status')).toHaveCount(1);
 	});
 
+	test('manifest exposes the restored flow variables with full value parity', async ({ page }) => {
+		// Validates the original-metadata → manifest parity port end-to-end through
+		// the served manifest: every dropped dimension is back with all its source
+		// value levels, and the two special query-modifier fields are toggles.
+		const m = await (await page.request.get('/data/manifest.json')).json();
+		const keys = (d) => Object.keys(m.flows[d].fields);
+
+		expect(keys('migration')).toEqual(expect.arrayContaining(['sec', 'inkchanges', 'divideYears']));
+		expect(keys('werkwerk')).toEqual(expect.arrayContaining(['sectorsector', 'divideYears']));
+		expect(keys('woonwerk')).toEqual(expect.arrayContaining(['sectorcat', 'divideYears']));
+		expect(keys('ovin')).toEqual(expect.arrayContaining(['hhfilter']));
+
+		// Full value-level parity against the original .js metadata.
+		expect(m.flows.migration.fields.sec.values).toHaveLength(10);
+		expect(m.flows.migration.fields.inkchanges.values).toHaveLength(5);
+		expect(m.flows.werkwerk.fields.sectorsector.values).toHaveLength(51);
+		expect(m.flows.woonwerk.fields.sectorcat.values).toHaveLength(9);
+		// soortbaan now exposes the previously-dropped 3rd source level.
+		for (const d of ['werkwerk', 'woonwerk']) {
+			expect(m.flows[d].fields.soortbaan.values.map((v) => v.id)).toContain(3);
+		}
+
+		// Special fields are toggles; ODiN declares its household dedup column.
+		expect(m.flows.migration.fields.divideYears.type).toBe('toggle');
+		expect(m.flows.ovin.fields.hhfilter.type).toBe('toggle');
+		expect(m.flows.ovin.hhDedupCol).toBe('hhid');
+		// divideYears needs each period's calendar-year span.
+		expect(m.flows.werkwerk.fields.year.values.every((v) => Number.isFinite(v.years))).toBe(true);
+	});
+
+	test('divideYears toggle normalises woon-werk flow values to per-year', async ({ page }) => {
+		test.slow();
+		const flowPanel = page.locator('details.panel', { hasText: 'Flow data' });
+		await flowPanel.locator('summary').click();
+
+		// Switch to a categorical-period flow (woon-werk) that carries divideYears.
+		await flowPanel
+			.locator('label.field', { hasText: 'Dataset' })
+			.locator('select')
+			.selectOption({ label: 'Woon-Werk 1999-2017' });
+		const enable = flowPanel
+			.locator('label.toggle', { hasText: 'Show flows' })
+			.locator('input[type="checkbox"]');
+		await enable.check();
+
+		// Wait for the woon-werk flow source to populate.
+		await page.waitForFunction(
+			() => (window.__map?.querySourceFeatures?.('flow-woonwerk-gem')?.length ?? 0) > 0,
+			{ timeout: 20_000 }
+		);
+		const maxValue = () =>
+			page.evaluate(() =>
+				(window.__map.querySourceFeatures('flow-woonwerk-gem') ?? []).reduce(
+					(mx, f) => Math.max(mx, f.properties.value ?? 0),
+					0
+				)
+			);
+		const before = await maxValue();
+		expect(before).toBeGreaterThan(0);
+
+		// Flip "Data per jaar" — every period total is divided by its year span
+		// (6–11), so the largest flow value must shrink.
+		const divToggle = flowPanel
+			.locator('label.toggle', { hasText: 'Data per jaar' })
+			.locator('input[type="checkbox"]');
+		await expect(divToggle).toHaveCount(1);
+		await divToggle.check();
+		await expect(page.locator('.status').nth(1)).not.toContainText('querying', { timeout: 15_000 });
+		await expect.poll(maxValue, { timeout: 15_000 }).toBeLessThan(before);
+
+		// Reset state for sibling tests: disable flows FIRST (the maxValue poll
+		// above already let the divideYears query settle, so no in-flight query
+		// can re-add the status row), then switch the dataset back to ODiN while
+		// disabled — the switch also clears the divideYears toggle.
+		await enable.uncheck();
+		await expect(page.locator('.status')).toHaveCount(1);
+		await flowPanel
+			.locator('label.field', { hasText: 'Dataset' })
+			.locator('select')
+			.selectOption({ label: 'Verplaatsingen 2004-2024 (OViN/ODiN)' });
+	});
+
 	test('directional gradient mode swaps the classic flow layer for the paired layer', async ({
 		page
 	}) => {
