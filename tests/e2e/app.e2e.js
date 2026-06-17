@@ -20,6 +20,12 @@ const test = base.extend({
 			// of data into OPFS and starves the query each test is waiting on.
 			await ctx.addInitScript(() => {
 				window.__E2E_NO_PREFETCH__ = true;
+				// Render only the heaviest handful of flows. A flow query returns up
+				// to ~72k OD pairs; generating bezier geometry for thousands of them
+				// freezes the page and, across parallel workers, drags the whole
+				// suite to a crawl. Value-based assertions read the top flows, which
+				// the cap keeps.
+				window.__E2E_FLOW_RENDER_CAP__ = 200;
 			});
 			// Stub the Protomaps basemap (vector tiles + glyph fonts). Every test
 			// loads the map, and these are internet round-trips no assertion

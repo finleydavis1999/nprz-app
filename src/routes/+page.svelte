@@ -322,7 +322,13 @@
 	// Above the cap we keep the top-50k by value (so the heaviest flows
 	// still render); the warning below the min-weight slider tells the user
 	// to raise the threshold if they want a different subset.
-	const FLOW_RENDER_CAP = 50_000;
+	//
+	// E2E only: tests set `__E2E_FLOW_RENDER_CAP__` to a tiny number so a flow
+	// query (woon-werk returns ~72k pairs) renders a handful of curves instead
+	// of thousands — bezier generation for the full set thrashes the CPU and,
+	// across parallel Playwright workers, makes the suite crawl. The heaviest
+	// flows are kept (top-N by value), so value-based assertions still hold.
+	const FLOW_RENDER_CAP = /** @type {any} */ (globalThis).__E2E_FLOW_RENDER_CAP__ ?? 50_000;
 	const filteredFlowsAll = $derived.by(() => {
 		if (!effectiveFlowResult) return [];
 		const studyIds = studyArea.ids;
