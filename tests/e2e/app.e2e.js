@@ -6,12 +6,13 @@ import { test as base, expect } from '@playwright/test';
 // Worker-scoped browser context so OPFS (parquet cache), localStorage, and
 // the basemap HTTP cache persist across tests within the worker. Each test
 // still gets a fresh page from that shared context, so URL state and Svelte
-// in-memory state reset between tests. With `fullyParallel: false` in the
-// playwright config this means: 1 worker + 8 sequential tests + 1 cold-start.
+// in-memory state reset between tests. The suite runs `fullyParallel: true`
+// (2 workers on CI, 4 locally — see playwright.config.js), and the shared
+// context below is reused across every test a given worker runs.
 //
 // Playwright's built-in `context` fixture is already test-scoped and can't be
 // overridden to worker-scope, so we expose a separate `sharedContext` fixture
-// and rebuild `page` from it.
+// and rebuild `page` from it. All three describe blocks below share it.
 const test = base.extend({
 	sharedContext: [
 		async ({ browser }, use) => {
@@ -90,16 +91,6 @@ test.describe('app', () => {
 
 		await page.waitForTimeout(500);
 		expect(errors.filter((e) => !/sourcemap/i.test(e))).toEqual([]);
-	});
-
-	test('layer calculator dock opens from the toggle strip', async ({ page }) => {
-		await expect(page.locator('.dock', { hasText: 'Layer Calculator' })).toHaveCount(0);
-		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
-		const dock = page.locator('.dock', { hasText: 'Layer Calculator' });
-		await expect(dock).toBeVisible();
-		// Close button hides it. Cleans up persisted dock state for sibling tests.
-		await dock.locator('.dock-close').click();
-		await expect(page.locator('.dock', { hasText: 'Layer Calculator' })).toHaveCount(0);
 	});
 
 	test('saving a layer is one click and auto-uniquifies the default name', async ({ page }) => {
@@ -228,36 +219,6 @@ test.describe('app', () => {
 		await expect(ageField).toContainText(/0\s*[–-]\s*99/);
 		await enable.uncheck();
 		await expect(page.locator('.status')).toHaveCount(1);
-	});
-
-	test('manifest exposes the restored flow variables with full value parity', async ({ page }) => {
-		// Validates the original-metadata → manifest parity port end-to-end through
-		// the served manifest: every dropped dimension is back with all its source
-		// value levels, and the two special query-modifier fields are toggles.
-		const m = await (await page.request.get('/data/manifest.json')).json();
-		const keys = (d) => Object.keys(m.flows[d].fields);
-
-		expect(keys('migration')).toEqual(expect.arrayContaining(['sec', 'inkchanges', 'divideYears']));
-		expect(keys('werkwerk')).toEqual(expect.arrayContaining(['sectorsector', 'divideYears']));
-		expect(keys('woonwerk')).toEqual(expect.arrayContaining(['sectorcat', 'divideYears']));
-		expect(keys('ovin')).toEqual(expect.arrayContaining(['hhfilter']));
-
-		// Full value-level parity against the original .js metadata.
-		expect(m.flows.migration.fields.sec.values).toHaveLength(10);
-		expect(m.flows.migration.fields.inkchanges.values).toHaveLength(5);
-		expect(m.flows.werkwerk.fields.sectorsector.values).toHaveLength(51);
-		expect(m.flows.woonwerk.fields.sectorcat.values).toHaveLength(9);
-		// soortbaan now exposes the previously-dropped 3rd source level.
-		for (const d of ['werkwerk', 'woonwerk']) {
-			expect(m.flows[d].fields.soortbaan.values.map((v) => v.id)).toContain(3);
-		}
-
-		// Special fields are toggles; ODiN declares its household dedup column.
-		expect(m.flows.migration.fields.divideYears.type).toBe('toggle');
-		expect(m.flows.ovin.fields.hhfilter.type).toBe('toggle');
-		expect(m.flows.ovin.hhDedupCol).toBe('hhid');
-		// divideYears needs each period's calendar-year span.
-		expect(m.flows.werkwerk.fields.year.values.every((v) => Number.isFinite(v.years))).toBe(true);
 	});
 
 	test('divideYears toggle normalises categorical-period flow values to per-year', async ({
@@ -806,5 +767,62 @@ test.describe('app', () => {
 		while ((await layerRows.count()) > 0) {
 			await layerRows.first().locator('.del').click();
 		}
+	});
+});
+
+// Pure HTTP/JSON contract assertions on the served manifest — no app boot, no
+// map, no node query. Lives outside `describe('app')` so it skips the heavy
+// `beforeEach` (goto + choropleth render) it would otherwise pay for nothing.
+test.describe('manifest contract', () => {
+	test('manifest exposes the restored flow variables with full value parity', async ({ page }) => {
+		// Validates the original-metadata → manifest parity port end-to-end through
+		// the served manifest: every dropped dimension is back with all its source
+		// value levels, and the two special query-modifier fields are toggles.
+		const m = await (await page.request.get('/data/manifest.json')).json();
+		const keys = (d) => Object.keys(m.flows[d].fields);
+
+		expect(keys('migration')).toEqual(expect.arrayContaining(['sec', 'inkchanges', 'divideYears']));
+		expect(keys('werkwerk')).toEqual(expect.arrayContaining(['sectorsector', 'divideYears']));
+		expect(keys('woonwerk')).toEqual(expect.arrayContaining(['sectorcat', 'divideYears']));
+		expect(keys('ovin')).toEqual(expect.arrayContaining(['hhfilter']));
+
+		// Full value-level parity against the original .js metadata.
+		expect(m.flows.migration.fields.sec.values).toHaveLength(10);
+		expect(m.flows.migration.fields.inkchanges.values).toHaveLength(5);
+		expect(m.flows.werkwerk.fields.sectorsector.values).toHaveLength(51);
+		expect(m.flows.woonwerk.fields.sectorcat.values).toHaveLength(9);
+		// soortbaan now exposes the previously-dropped 3rd source level.
+		for (const d of ['werkwerk', 'woonwerk']) {
+			expect(m.flows[d].fields.soortbaan.values.map((v) => v.id)).toContain(3);
+		}
+
+		// Special fields are toggles; ODiN declares its household dedup column.
+		expect(m.flows.migration.fields.divideYears.type).toBe('toggle');
+		expect(m.flows.ovin.fields.hhfilter.type).toBe('toggle');
+		expect(m.flows.ovin.hhDedupCol).toBe('hhid');
+		// divideYears needs each period's calendar-year span.
+		expect(m.flows.werkwerk.fields.year.values.every((v) => Number.isFinite(v.years))).toBe(true);
+	});
+});
+
+// UI-shell-only tests: they exercise the dock toggle strip and never touch node
+// data, so they wait for the always-present `.strip` (rendered top-level by
+// DockToggleStrip, outside the manifest-gated sidebars) instead of the
+// choropleth `.legend`. The node query still runs in the background; the test
+// just doesn't block on it.
+test.describe('app (shell only)', () => {
+	test.beforeEach(async ({ page }) => {
+		await page.goto('/');
+		await expect(page.locator('.strip')).toBeVisible({ timeout: 30_000 });
+	});
+
+	test('layer calculator dock opens from the toggle strip', async ({ page }) => {
+		await expect(page.locator('.dock', { hasText: 'Layer Calculator' })).toHaveCount(0);
+		await page.locator('.strip .tool', { hasText: 'Layer Calculator' }).click();
+		const dock = page.locator('.dock', { hasText: 'Layer Calculator' });
+		await expect(dock).toBeVisible();
+		// Close button hides it. Cleans up persisted dock state for sibling tests.
+		await dock.locator('.dock-close').click();
+		await expect(page.locator('.dock', { hasText: 'Layer Calculator' })).toHaveCount(0);
 	});
 });
