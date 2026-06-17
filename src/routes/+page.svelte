@@ -115,6 +115,13 @@
 	// Within the same layer, the user's slider position is preserved; only
 	// out-of-range values get re-anchored.
 	let prevFlowLayerSignature = '';
+	// Monotonic token for in-flight flow queries. Bumped on every effect run —
+	// including the disable/early-return path — so a query that resolves after
+	// the user has toggled flows off (or changed args) can detect it's stale and
+	// skip writing back into flowResult/flowQuerying. Without this, a query
+	// fired just before "Show flows" is unchecked resolves afterwards and
+	// re-populates flowResult, leaving the flow status row stuck on screen.
+	let flowQuerySeq = 0;
 	const FLOW_DEFAULT_TOP_FRACTION = 0.1;
 	/**
 	 * @param {{value:number}[]} flows
@@ -184,8 +191,13 @@
 	// Re-run flow query whenever flow selection changes (only while enabled).
 	// Note: flow.minWeight is a client-side filter (see filteredFlows below).
 	$effect(() => {
+		const seq = ++flowQuerySeq;
 		if (!manifest || !flow.enabled || !flowScaleAvailable) {
 			flowResult = null;
+			// A previous query may still be in flight; invalidating the token
+			// above makes it a no-op when it lands, but clear the spinner now so
+			// the flow status row disappears immediately on disable.
+			flowQuerying = false;
 			return;
 		}
 		const args = {
@@ -206,6 +218,7 @@
 		prevFlowLayerSignature = layerSignature;
 		runFlows(args)
 			.then((res) => {
+				if (seq !== flowQuerySeq) return; // superseded by a newer run / disable
 				flowResult = res;
 				// On layer switch, reset the min-count cutoff to the dataset-
 				// appropriate default. For non-weighted layers it's meaningless,
@@ -231,10 +244,12 @@
 				}
 			})
 			.catch((e) => {
+				if (seq !== flowQuerySeq) return; // superseded by a newer run / disable
 				flowError = `flow query: ${e.message}`;
 				flowResult = null;
 			})
 			.finally(() => {
+				if (seq !== flowQuerySeq) return; // superseded by a newer run / disable
 				flowQuerying = false;
 			});
 	});
