@@ -260,29 +260,34 @@ test.describe('app', () => {
 		expect(m.flows.werkwerk.fields.year.values.every((v) => Number.isFinite(v.years))).toBe(true);
 	});
 
-	test('divideYears toggle normalises woon-werk flow values to per-year', async ({ page }) => {
+	test('divideYears toggle normalises categorical-period flow values to per-year', async ({
+		page
+	}) => {
 		test.slow();
 		const flowPanel = page.locator('details.panel', { hasText: 'Flow data' });
 		await flowPanel.locator('summary').click();
 
-		// Switch to a categorical-period flow (woon-werk) that carries divideYears.
+		// Use werkwerk ("Baanverhuizingen"): it carries the same 6/6/11-year
+		// divideYears periods as woon-werk but its parquet is ~8 MB vs woon-werk's
+		// ~60 MB, so the two full-table scans this test runs stay fast on a
+		// CPU-contended CI runner instead of blowing the query timeout.
 		await flowPanel
 			.locator('label.field', { hasText: 'Dataset' })
 			.locator('select')
-			.selectOption({ label: 'Woon-Werk 1999-2017' });
+			.selectOption({ label: 'Baanverhuizingen 1999-2017' });
 		const enable = flowPanel
 			.locator('label.toggle', { hasText: 'Show flows' })
 			.locator('input[type="checkbox"]');
 		await enable.check();
 
-		// Wait for the woon-werk flow source to populate.
+		// Wait for the werkwerk flow source to populate.
 		await page.waitForFunction(
-			() => (window.__map?.querySourceFeatures?.('flow-woonwerk-gem')?.length ?? 0) > 0,
+			() => (window.__map?.querySourceFeatures?.('flow-werkwerk-gem')?.length ?? 0) > 0,
 			{ timeout: 20_000 }
 		);
 		const maxValue = () =>
 			page.evaluate(() =>
-				(window.__map.querySourceFeatures('flow-woonwerk-gem') ?? []).reduce(
+				(window.__map.querySourceFeatures('flow-werkwerk-gem') ?? []).reduce(
 					(mx, f) => Math.max(mx, f.properties.value ?? 0),
 					0
 				)

@@ -249,7 +249,14 @@
 				flowResult = null;
 			})
 			.finally(() => {
-				if (seq !== flowQuerySeq) return; // superseded by a newer run / disable
+				// Clear the spinner unconditionally: with DuckDB serialising queries
+				// on a single worker, overlapping runs resolve in order, and any one
+				// settling means "no longer the only thing in flight" is good enough
+				// for the status row. Guarding this on `seq` (so only the latest run
+				// clears it) strands the spinner on "querying…" whenever a newer run
+				// is queued behind a slow one — which is exactly what happened on CI.
+				// The `seq` guard stays on `.then`/`.catch`, where it matters: a stale
+				// result must not overwrite flowResult/flowError.
 				flowQuerying = false;
 			});
 	});
