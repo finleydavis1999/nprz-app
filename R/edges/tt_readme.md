@@ -21,8 +21,8 @@ The network build + matrix runs. All kept together as a reference script under
 `R/edges/tt-build-pipeline.R/` (not wired into `R/build.R`); inputs and intermediate
 outputs live on a local drive (`D:/NPRZ_tt_out`, gitignored scope).It integrated and includes the following;
 
-- `tt-build/01-build-network.R`  -- r5r network from OSM (Geofabrik) + OVapi GTFS
-- `tt-build/02-run-matrix.R`     -- gemeente / PC4 / buurt matrices, per cluster
+- `tt-build/01-build-network.R` -- r5r network from OSM (Geofabrik) + OVapi GTFS
+- `tt-build/02-run-matrix.R` -- gemeente / PC4 / buurt matrices, per cluster
 - `tt-build/03-run-matrix-buurt-checkpointed.R` -- batched/resumable heavy run
 
 ## Method summary
