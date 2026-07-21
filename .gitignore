@@ -42,3 +42,6 @@ test-results
 .claude/worktrees/
 .claude/plans/
 .claude/memory/
+
+# generated images
+figs/
