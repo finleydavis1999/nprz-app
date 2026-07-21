@@ -34,8 +34,8 @@ network that doesnt exist yet at centroid-build time:
    centroids sitting far from the road network onto it (only where the snapped
    point stays inside the polygon), then rewrite the affected matrices.
 
-The committed JSONs are the output of both passes. Re-running pass 1 alone will
-overwrite the pass-2 corrections.
+The committed JSONs are pass-1 output (pre snap-correction). Running `build_all_centroids()` reproduces them exactly; running
+`fix_centroids_by_snap()` afterwards modifies them, and the diff shows which centroids moved.
 
 # 2. matrices
 source("R/traveltimes/ttbuildnational.R")
