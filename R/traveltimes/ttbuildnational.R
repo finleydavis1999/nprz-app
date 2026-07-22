@@ -32,15 +32,31 @@ if (!exists("PARQUET_DIR")) PARQUET_DIR <- "static/data/parquet"
 .detect_heap <- function(reserve_gb = 6, min_gb = 8, max_gb = 48) {
   ram <- tryCatch({
     if (.Platform$OS.type == "windows") {
+      # wmic is deprecated on newer Windows; fall back to PowerShell
       x <- suppressWarnings(system("wmic ComputerSystem get TotalPhysicalMemory",
                                    intern = TRUE, ignore.stderr = TRUE))
-      as.numeric(gsub("\\D", "", x[grepl("^[0-9 ]+$", x)][1])) / 1e9
+      v <- suppressWarnings(as.numeric(gsub("\\D", "", x[grepl("^[0-9 ]+$", x)][1])) / 1e9)
+      if (is.na(v) || !is.finite(v)) {
+        y <- suppressWarnings(system(paste(
+          "powershell -NoProfile -Command",
+          "\"(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory\""),
+          intern = TRUE, ignore.stderr = TRUE))
+        v <- suppressWarnings(as.numeric(gsub("\\D", "", y[grepl("[0-9]", y)][1])) / 1e9)
+      }
+      v
     } else if (file.exists("/proc/meminfo")) {
       as.numeric(sub("\\D+", "", grep("MemTotal", readLines("/proc/meminfo"),
                                       value = TRUE)[1])) / 1e6
     } else NA
   }, error = function(e) NA)
-  if (is.na(ram) || !is.finite(ram)) return(paste0("-Xmx", min_gb, "G"))
+
+  if (is.na(ram) || !is.finite(ram)) {
+    message("NOTE: could not detect RAM. Defaulting to ", min_gb,
+            "G, which is NOT enough for a national build -- set HEAP manually ",
+            "before sourcing, e.g. HEAP <- \"-Xmx24G\"")
+    return(paste0("-Xmx", min_gb, "G"))
+  }
+  message("detected ", round(ram), " GB RAM")
   paste0("-Xmx", max(min_gb, min(max_gb, floor(ram - reserve_gb))), "G")
 }
 if (!exists("HEAP")) HEAP <- .detect_heap()
