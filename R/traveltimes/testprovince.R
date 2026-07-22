@@ -19,9 +19,10 @@
 
 TEST_PROVINCE <- "Zuid-Holland"     # any name in PROV_CODE below
 
-NET_DIR     <- "D:/NPRZ_net_test"
-OUT_DIR     <- "D:/NPRZ_tt_out_test"
-PARQUET_DIR <- "D:/NPRZ_tt_out_test/parquet"
+.tp <- tolower(TEST_PROVINCE)
+NET_DIR     <- paste0("D:/NPRZ_net_test/", .tp)
+OUT_DIR     <- paste0("D:/NPRZ_tt_out_test/", .tp)
+PARQUET_DIR <- paste0("D:/NPRZ_tt_out_test/", .tp, "/parquet")
 
 source("R/traveltimes/ttbuildnational.R")
 

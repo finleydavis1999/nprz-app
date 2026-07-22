@@ -229,6 +229,8 @@ assemble_scale <- function(scale, points = NULL) {
     transmute(o_code = as.character(from_id), d_code = as.character(to_id),
               mode = unname(MODE_ID[mode]), minutes = as.double(minutes))
 
+  df <- df |> filter(o_code %in% pts$id, d_code %in% pts$id)
+  
   oi <- ix[df$o_code]; di <- ix[df$d_code]
   df$distance_m <- round(sqrt((co[oi,1]-co[di,1])^2 + (co[oi,2]-co[di,2])^2))
   df <- set_intrazonal(df, scale)
@@ -286,12 +288,17 @@ verify_scale <- function(df, scale, expected_ids = NULL) {
   print(as.data.frame(df |> distinct(o_code) |>
         mutate(pre = substr(o_code,1,1)) |> count(pre, name="origins")))
 
-  mx <- max(df$minutes); cat("[5] max minutes: ", mx, " | cap ", CAP[[scale]], "\n", sep="")
-  if (mx > CAP[[scale]]) P("cap exceeded")
+  nna <- sum(is.na(df$minutes))
+  mx  <- max(df$minutes, na.rm = TRUE)
+  cat("[5] max minutes: ", mx, " | cap ", CAP[[scale]],
+      " | NA minutes: ", nna, "\n", sep = "")
+  if (nna > 0) P(paste(nna, "rows with NA minutes"))
+  if (is.finite(mx) && mx > CAP[[scale]]) P("cap exceeded")
   if (length(unique(df$mode)) != 4) P("not all four modes present")
 
   bm <- df |> group_by(mode) |>
-    summarise(n=n(), med=median(minutes), max=max(minutes), .groups="drop") |>
+    summarise(n=n(), med=median(minutes, na.rm=TRUE),
+              max=max(minutes, na.rm=TRUE), .groups="drop") |>
     mutate(mode_name = MODE_NAME[as.character(mode)])
   cat("[6] by mode:\n"); print(as.data.frame(bm[,c("mode_name","n","med","max")]))
   if (bm$med[bm$mode==1] > bm$med[bm$mode==2]) P("car slower than transit")
@@ -302,15 +309,13 @@ verify_scale <- function(df, scale, expected_ids = NULL) {
   print(round(quantile(car$kmh, c(.01,.5,.99), na.rm=TRUE), 1))
 
   # Self-pair time is roughly twice the walk from the centroid to the road
-  # network, so a large value means the centroid sits far from any road.
-  self <- df |> filter(o_code==d_code, mode==1L) |> arrange(desc(minutes))
-  cat("[8] self-pairs: ", nrow(self), " | median ", median(self$minutes),
-      " | max ", max(self$minutes), "\n", sep="")
-  bad <- self |> filter(minutes > 10)
-  if (nrow(bad)) {
-    cat("    centroids far from the road network (self-time > 10 min):\n")
-    print(as.data.frame(utils::head(bad[,c("o_code","minutes")], 10)))
-  }
+  # Self-pairs carry the intrazonal value set from geometry, so this reports
+  # rather than diagnoses -- centroid-to-road distance is the [snap] report.
+  self <- df |> filter(o_code == d_code, mode == 1L)
+  cat("[8] self-pairs: ", nrow(self), " | intrazonal car time ",
+      unique(self$minutes)[1], " min (set from geometry; see [snap] for ",
+      "centroid-to-road distances)\n", sep = "")
+  if (length(unique(self$minutes)) > 1) P("intrazonal times not constant")
 
   a <- car |> select(o_code,d_code,minutes)
   sym <- a |> inner_join(rename(a, o2=d_code, d2=o_code, rev=minutes),
@@ -349,9 +354,11 @@ verify_scale <- function(df, scale, expected_ids = NULL) {
 
 snap_report <- function(core, scale, points = NULL, threshold = 300) {
   pts <- if (is.null(points)) load_points(CENTROIDS[[scale]]) else points
-  sn <- tryCatch(r5r::find_snap(core, pts, mode = "CAR"),
-                 error = function(e) { message("  snap check unavailable: ",
-                                               conditionMessage(e)); NULL })
+  sn <- tryCatch(r5r::find_snap(r5r_network = core, points = pts, mode = "CAR"),
+    error = function(e)
+      tryCatch(r5r::find_snap(r5r_core = core, points = pts, mode = "CAR"),
+        error = function(e2) { message("  snap check unavailable: ",
+                                       conditionMessage(e2)); NULL }))
   if (is.null(sn)) return(invisible(NULL))
   sn <- as.data.frame(sn)
   cat("\n[snap] distance from centroid to road network (m), ", scale, ":\n    ", sep="")
@@ -365,27 +372,46 @@ snap_report <- function(core, scale, points = NULL, threshold = 300) {
 
 # Relocate flagged centroids onto the road network, keeping them inside their own
 # polygon. Rewrites the centroid JSON. Run once, then rebuild the matrices.
+# Relocate centroids that sit far from the road network onto it, keeping them
+# inside their own polygon. Rewrites the centroid JSON; rebuild the affected
+# scale afterwards. Needs a built network, so this is a second pass after
+# build_all_centroids().
 fix_centroids_by_snap <- function(core, scale, threshold = 300) {
   pts <- load_points(CENTROIDS[[scale]])
-  sn  <- as.data.frame(r5r::find_snap(core, pts, mode = "CAR"))
+
+  # r5r renamed the network argument in 2.3; try both.
+  sn <- tryCatch(r5r::find_snap(r5r_network = core, points = pts, mode = "CAR"),
+    error = function(e)
+      tryCatch(r5r::find_snap(r5r_core = core, points = pts, mode = "CAR"),
+        error = function(e2) { message("  snap check unavailable: ",
+                                       conditionMessage(e2)); NULL }))
+  if (is.null(sn)) return(invisible(NULL))
+  sn <- as.data.frame(sn)
+
   bad <- sn[!is.na(sn$distance) & sn$distance > threshold, ]
-  if (!nrow(bad)) { message("[", scale, "] nothing over ", threshold, " m"); return(invisible(NULL)) }
+  if (!nrow(bad)) {
+    message("[", scale, "] nothing over ", threshold, " m"); return(invisible(0))
+  }
 
   polys <- sf::st_read(.geo_for(scale), quiet = TRUE) |>
     dplyr::transmute(area_code = as.character(area_code)) |> sf::st_make_valid()
+
   moved <- 0
   for (i in seq_len(nrow(bad))) {
     id <- as.character(bad$point_id[i])
-    p  <- sf::st_sfc(sf::st_point(c(bad$snap_lon[i], bad$snap_lat[i])), crs = 4326)
     poly <- polys[polys$area_code == id, ]
     if (!nrow(poly)) next
+    p <- sf::st_sfc(sf::st_point(c(bad$snap_lon[i], bad$snap_lat[i])), crs = 4326)
+    # only move it if the snapped point is still inside its own polygon
     if (lengths(sf::st_within(p, sf::st_transform(poly, 4326))) > 0) {
       pts$lon[pts$id == id] <- bad$snap_lon[i]
       pts$lat[pts$id == id] <- bad$snap_lat[i]
       moved <- moved + 1
     }
   }
-  res <- setNames(lapply(seq_len(nrow(pts)), function(i) c(pts$lon[i], pts$lat[i])), pts$id)
+
+  res <- setNames(lapply(seq_len(nrow(pts)),
+                         function(i) c(pts$lon[i], pts$lat[i])), pts$id)
   jsonlite::write_json(res, CENTROIDS[[scale]], auto_unbox = TRUE, digits = 6)
   message("[", scale, "] moved ", moved, " of ", nrow(bad),
           " onto the road network (rest left: snap point outside the polygon)")
@@ -398,25 +424,31 @@ fix_centroids_by_snap <- function(core, scale, threshold = 300) {
 # geometry: the mean distance from the centre of a disc of equal area to a random
 # point in it is (2/3)*sqrt(A/pi), divided by that mode's observed median speed.
 set_intrazonal <- function(df, scale) {
-  polys <- sf::st_read(.geo_for(scale), quiet = TRUE) |> sf::st_transform(28992)
-  r_eff <- (2/3) * sqrt(mean(as.numeric(sf::st_area(polys)), na.rm = TRUE) / pi)
+  r_eff <- tryCatch({
+    polys <- sf::st_read(.geo_for(scale), quiet = TRUE) |> sf::st_transform(28992)
+    v <- (2/3) * sqrt(mean(as.numeric(sf::st_area(polys)), na.rm = TRUE) / pi)
+    if (!is.finite(v) || v <= 0) stop("non-finite area") else v
+  }, error = function(e) unname(c(gem = 5000, pc4 = 900, buurt = 400)[scale]))
 
-  fallback <- c("1" = 40, "2" = 18, "3" = 14, "4" = 4.5)   # km/h if unestimable
+  kmh <- c("1" = 40, "2" = 18, "3" = 14, "4" = 4.5)      # km/h defaults
   spd <- df |> dplyr::filter(minutes > 0, distance_m > 1000, distance_m < 5000) |>
     dplyr::group_by(mode) |>
-    dplyr::summarise(kmh = median((distance_m/1000)/(minutes/60)), .groups = "drop")
+    dplyr::summarise(k = median((distance_m/1000)/(minutes/60), na.rm = TRUE),
+                     .groups = "drop")
+  ok <- is.finite(spd$k) & spd$k > 1
+  if (any(ok)) kmh[as.character(spd$mode[ok])] <- spd$k[ok]
 
-  kmh <- fallback
-  ok <- is.finite(spd$kmh) & spd$kmh > 1
-  if (any(ok)) kmh[as.character(spd$mode[ok])] <- spd$kmh[ok]
-  tt <- pmax(1, round((r_eff/1000) / kmh * 60))
+  tt <- round((r_eff/1000) / kmh * 60)
+  tt[!is.finite(tt) | tt < 1] <- 1
+  names(tt) <- names(kmh)                    # pmax drops names; be explicit
 
-  cat("\n[intrazonal] representative internal distance ", round(r_eff), " m\n", sep="")
-  print(data.frame(mode = MODE_NAME[names(kmh)], kmh = round(kmh,1),
+  cat("\n[intrazonal] internal distance ", round(r_eff), " m\n", sep = "")
+  print(data.frame(mode = MODE_NAME[names(kmh)], kmh = round(kmh, 1),
                    minutes = unname(tt)), row.names = FALSE)
 
   idx <- df$o_code == df$d_code
-  df$minutes[idx] <- unname(tt[as.character(df$mode[idx])])
+  v <- unname(tt[as.character(df$mode[idx])]); v[is.na(v)] <- 2
+  df$minutes[idx] <- v
   df
 }
 

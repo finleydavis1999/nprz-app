@@ -9,46 +9,71 @@ OVapi national GTFS feed.
 - **Java 21** (Temurin), `JAVA_HOME` set. Newer JDKs may error.
 - `install.packages(c("r5r","arrow","dplyr","jsonlite","sf","ggplot2"))`
   (plus `mapview` for interactive centroid maps).
-- **CBS 100m grid** at `raw-data/cbs/grid_100m_2024/cbs_vk100_2024_v1.gpkg`
-  (not in the repo).
+- **CBS 100m grid** (not in the repo) at
+  `raw-data/cbs/grid_100m_2024/cbs_vk100_2024_v1.gpkg` — only needed if you rebuild centroids; the committed JSONs mean you can skip it.
 - ~10 GB disk. RAM is the binding constraint: the national network build OOMs
   below roughly 20 GB.
 
-## Run
+Run from the project root, in a **fresh R session** — the Java heap is fixed
+when r5r first loads.
 
-Two steps, both from the project root, each in a **fresh R session** (the Java
-heap is fixed when r5r first loads).
+Centroids are already committed, so you can go straight to the matrices.
+
+## Option A — staged, with a checkpoint before buurt
 
 ```r
-# 1. centroids (a few minutes)
+setwd("<project root>")
+source("R/traveltimes/ttbuildnational.R")
+
+build_all("gem")     # gemeente only: a cheap national smoke test, minutes
+build_all()          # gemeente + PC4, then stops with a buurt projection
+
+# CAP["buurt"] <- 90L    # optional: tighten the cap if the projection is large
+build_all("buurt")
+```
+
+`build_all("gem")` is worth running first. It is only 342 origins, but it
+exercises the download, the network build and the orchestration, and surfaces
+any memory problem during the network build rather than hours into PC4.
+
+`build_all()` stops after PC4 and prints a projected row count, file size and run
+time for buurt, so you can set `CAP["buurt"]` before committing to it.
+
+## Option B — everything in one go, unattended
+
+```r
+setwd("<project root>")
+sink("traveltime-build-log.txt", split = TRUE)
+
+source("R/traveltimes/ttbuildnational.R")
+build_all(c("gem", "pc4"))   # no stop: buurt is not in scales
+build_all("buurt")
+
+sink()
+```
+
+The second call reuses the downloaded inputs and the built network, so it does
+not rebuild anything. All verification output goes to the log for inspection
+afterwards. (`sink` captures the check tables; batch progress and the GTFS banner
+go to the console only.)
+
+To include centroids in the same run, prepend:
+
+```r
 source("R/traveltimes/build-centroids.R")
 cents <- build_all_centroids()
 qa    <- qa_centroids(cents)
-
-Centroids are built in two passes, because the road-snap correction needs a
-network that doesnt exist yet at centroid-build time:
-
-1. `build_all_centroids()` — deterministic; reproduces the committed JSONs
-   except for step 2.
-2. `fix_centroids_by_snap(core, scale)` — after the network is built, moves
-   centroids sitting far from the road network onto it (only where the snapped
-   point stays inside the polygon), then rewrite the affected matrices.
-
-The committed JSONs are pass-1 output (pre snap-correction). Running `build_all_centroids()` reproduces them exactly; running
-`fix_centroids_by_snap()` afterwards modifies them, and the diff shows which centroids moved.
-
-# 2. matrices
-source("R/traveltimes/ttbuildnational.R")
-build_all()            # gem + pc4, then stops with a buurt projection
-build_all("buurt")     # after deciding CAP["buurt"]
 ```
 
-Nothing needs editing. The heap is sized from available RAM and the departure
-date is picked from the GTFS calendar; both are printed. Override anything by
-assigning it **before** sourcing:
+## Configuration
+
+The heap is sized from available RAM and the departure date is picked from the
+GTFS calendar, so neither needs setting. **Check the paths, though** — `NET_DIR`
+and `OUT_DIR` default to `D:/`, which may not exist on your machine. Override
+anything by assigning it **before** sourcing:
 
 ```r
-NET_DIR <- "E:/tt"; HEAP <- "-Xmx32G"
+NET_DIR <- "E:/nprz-tt"; OUT_DIR <- "E:/nprz-tt-out"; HEAP <- "-Xmx32G"
 source("R/traveltimes/ttbuildnational.R")
 ```
 
@@ -57,7 +82,7 @@ source("R/traveltimes/ttbuildnational.R")
 | `NET_DIR`       | `D:/NPRZ_net`         | OSM, GTFS, `network.dat`  |
 | `OUT_DIR`       | `D:/NPRZ_tt_out`      | per-batch intermediates   |
 | `PARQUET_DIR`   | `static/data/parquet` | final output              |
-| `HEAP`          | auto (RAM − 6 GB)     | JVM heap                  |
+| `HEAP`          | auto (RAM - 6 GB)     | JVM heap                  |
 | `DEPART`        | auto                  | departure datetime        |
 | `CAP`           | 150 min               | travel-time cap per scale |
 | `SPLIT_BY_MODE` | buurt only            | one file per mode         |
@@ -74,8 +99,10 @@ Runs are batched and resumable: an interruption costs one batch, not the scale.
   `travel_time_matrix` returns no network distance.
 - **Pairs beyond the cap are absent, not zero.** Downstream, treat a missing pair
   as "beyond the horizon" — dropping them silently biases any joined analysis.
-- **Intrazonal** (`o == d`) times are set from area geometry and mode speed, not
-  taken from r5r, which returns arbitrary access-leg artefacts.
+- **Intrazonal** (`o == d`) times are set from geometry, not taken from r5r,
+  which returns access-leg artefacts. The representative internal distance is
+  (2/3)·√(mean area / π) for that scale, divided by the mode's median observed
+  speed. One value per scale per mode.
 
 Buurt writes four per-mode files; gemeente and PC4 one each.
 
@@ -88,12 +115,7 @@ drawn fresh each run for external spot-checking.
 
 `snap_report(core, scale)` gives the distance from each centroid to the road
 network. Anything over ~300 m inflates every journey from that area by a walking
-access leg. To correct:
-
-```r
-fix_centroids_by_snap(core, "pc4")   # moves flagged centroids onto the network
-build_all("pc4")                      # delete OUT_DIR/pc4 first to force a re-run
-```
+access leg.
 
 ## Centroids
 
@@ -116,6 +138,34 @@ Jobs cannot weight a centroid: job data is a count per area, not a distribution
 within it. Fallbacks 2 and 3 are the best proxy until LISA provides job
 locations.
 
+### Two passes, and one outstanding correction
+
+The road-snap correction needs a built network, which does not exist at
+centroid-build time, so centroids are finished in two passes:
+
+1. `build_all_centroids()` — deterministic, and reproduces the committed JSONs.
+2. `fix_centroids_by_snap(core, scale)` — after the network is built, moves
+   centroids sitting far from the road network onto it, where the snapped point
+   stays inside the polygon.
+
+**The committed JSONs are pass-1 output; pass 2 has not been run.** Re-running
+`build_all_centroids()` after a correction would overwrite it, so run pass 1
+before pass 2, not after. To apply the correction:
+
+```r
+source("R/traveltimes/ttbuildnational.R")
+core <- build_national_network()
+snap_report(core, "pc4")             # lists centroids >300 m from a road
+fix_centroids_by_snap(core, "pc4")   # moves them onto the network
+unlink(file.path(OUT_DIR, "pc4"), recursive = TRUE)
+build_all("pc4")                     # rebuild that scale
+```
+
+Centroid maps are written to `figs/centroids/` by `build_all_centroids()`, along
+with `qa_centroids()` for a numeric quality summary and, with `mapview`
+installed, `inspect_all()` / `inspect_flagged()` / `find_centroid()` for
+interactive checking on an OSM basemap.
+
 ## Optional: single-province test
 
 Not needed to build the national matrix — a development aid that runs the same
@@ -127,9 +177,8 @@ source("R/traveltimes/testprovince.R")
 build_test(c("gem","pc4","buurt"))
 ```
 
-Set `TEST_PROVINCE` at the top. Paths redirect to `*_test` directories. Changing
-the province forces a network rebuild, or the previous one is silently reused.
-This proves correctness, not capacity.
+Set `TEST_PROVINCE` at the top. Paths redirect to `*_test` directories, one per
+province. This proves correctness, not capacity.
 
 ## Not included
 
